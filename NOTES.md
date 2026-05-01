@@ -172,29 +172,29 @@ See [serial_hexdump_logger.c](./serial_hexdump_logger.c) for a utility that will
 
 ## Firmware Static Analysis
 
-> Contributed: complements the empirical RS485 captures above with findings from static analysis of the official BMS firmware binary. Cross-referenced against Ken's traces — every register Ken named or measured is consistent with what the firmware does, and several of his "Unknown" entries can be explained from the code.
+> Contributed: complements the empirical RS485 captures above with findings from static analysis of the official BMS firmware binary. Cross-referenced against Ken's traces - every register Ken named or measured is consistent with what the firmware does, and several of his "Unknown" entries can be explained from the code.
 
-GivEnergy's official BMS firmware is distributed as `BMS_ARM.bin` (one file per firmware version). These are STM32-family ARM Cortex-M Thumb binaries with a 4-byte vendor header (`0xVVVV 0x5566` — version little-endian + magic) followed by a standard Cortex-M vector table at file offset 4.
+GivEnergy's official BMS firmware is distributed as `BMS_ARM.bin` (one file per firmware version). These are STM32-family ARM Cortex-M Thumb binaries with a 4-byte vendor header (`0xVVVV 0x5566` - version little-endian + magic) followed by a standard Cortex-M vector table at file offset 4.
 
 Analysis below is from firmware version **3022** (`0x0BCE`), which is the version Ken's first trace shows. Cross-checked against versions 3017 and 3020:
 - **3020 is functionally identical to 3022** for the wire protocol; addresses shift but field meanings don't change.
-- **3017 underwent a substantial refactor** between 3017 → 3020 (143 KB → 119 KB binary). Same fields, different code structure.
+- **3017 underwent a substantial refactor** between 3017 -> 3020 (143 KB -> 119 KB binary). Same fields, different code structure.
 - **Gen 3 / 4xxx (~165 KB)** is a different protocol architecture and not analysed here.
 
 ### MCU and peripherals
 
-- **MCU**: STM32F103xC/D/E or STM32F105/F107 connectivity-line variant. Determined from peripheral-base references in literal pools (GPIOA-D, USART1-3, **UART4 + UART5**, ADC1/2, SPI1) — UART4/5 don't exist on the basic STM32F103C8T6 used in the inverter.
+- **MCU**: STM32F103xC/D/E or STM32F105/F107 connectivity-line variant. Determined from peripheral-base references in literal pools (GPIOA-D, USART1-3, **UART4 + UART5**, ADC1/2, SPI1) - UART4/5 don't exist on the basic STM32F103C8T6 used in the inverter.
 - **Inverter Modbus port** is USART3 (`0x40004800`); 9600 baud is consistent with the firmware though the actual BRR write goes through helper functions.
-- **Inter-pack channel** is on UART4 (`0x40004C00`), running a Pylontech-compatible PACE protocol (version `0x25`, CID1=`0x46` LiFePO4) for communication between paralleled batteries. Not relevant to inverter↔battery emulation but useful context.
+- **Inter-pack channel** is on UART4 (`0x40004C00`), running a Pylontech-compatible PACE protocol (version `0x25`, CID1=`0x46` LiFePO4) for communication between paralleled batteries. Not relevant to inverter<->battery emulation but useful context.
 - The bit-banged I2C on PB6/PB7 is just a `0x50` 24Cxx EEPROM (calibration / serial / lifetime counters), not a cell-monitor AFE.
 
 ### Modbus implementation (matches Ken's empirical findings)
 
-The firmware's Modbus dispatcher (function entry at flash `0x0800e1b8`) implements **FC03, FC04 and FC06 only**. Any other function code returns exception 0x80|FC with exception code 1 ("Illegal Function"). Maximum register count per FC03 / FC04 read is `0x80` (128) — exceeded counts return exception code 2 / 4.
+The firmware's Modbus dispatcher (function entry at flash `0x0800e1b8`) implements **FC03, FC04 and FC06 only**. Any other function code returns exception 0x80|FC with exception code 1 ("Illegal Function"). Maximum register count per FC03 / FC04 read is `0x80` (128) - exceeded counts return exception code 2 / 4.
 
 Frame buffer is at SRAM `0x2000385c`, layout: `[slave, FC, addr_hi, addr_lo, count_hi, count_lo]`. CRC handling is standard Modbus-RTU.
 
-This confirms Ken's empirical observation that the inverter only ever does reads — FC06 is in the firmware but not part of the inverter's normal poll cycle.
+This confirms Ken's empirical observation that the inverter only ever does reads - FC06 is in the firmware but not part of the inverter's normal poll cycle.
 
 ### FC03 backing store (holding-register table)
 
@@ -203,7 +203,7 @@ The firmware's holding registers are a flat array of **200 (`0xC8`) 16-bit halfw
 for i in range(start, start+count):
     tx.append(htons(table[i]))
 ```
-No per-register handler logic — it's just a SRAM mirror that other tasks populate.
+No per-register handler logic - it's just a SRAM mirror that other tasks populate.
 
 - The init function at `0x0800d534` clears all 200 registers to `0xFFFF`, then writes specific defaults.
 - The update function at `0x0800d584` recomputes volatile fields each cycle.
@@ -212,41 +212,41 @@ This is how the values Ken observes in the HR poll get there.
 
 ### Holding-register interpretations (firmware-derived)
 
-Same byte ranges as Ken's HR table above; this fills in many of his "Unknown" entries based on what the firmware code does. Confidence varies — some are direct (e.g. firmware version is literally `movw r0, #0xbce`), others are inferences from helper-function context.
+Same byte ranges as Ken's HR table above; this fills in many of his "Unknown" entries based on what the firmware code does. Confidence varies - some are direct (e.g. firmware version is literally `movw r0, #0xbce`), others are inferences from helper-function context.
 
 | Reg | Bytes | Ken's empirical | Firmware-derived |
 |-----|-------|-----------------|------------------|
-| 0   | 0-1   | `0x0065`=101 (constant) | Init writes literal `0x65` once; persistent. Likely a **fixed protocol/device marker** (not the slave address — that's set by dipswitches) |
-| 1-4 | 2-9   | `FF FF` × 4 | Never written by firmware after the 0xFFFF init — **truly unused** |
+| 0   | 0-1   | `0x0065`=101 (constant) | Init writes literal `0x65` once; persistent. Likely a **fixed protocol/device marker** (not the slave address - that's set by dipswitches) |
+| 1-4 | 2-9   | `FF FF` × 4 | Never written by firmware after the 0xFFFF init - **truly unused** |
 | 5-9 | 10-19 | Serial Number | Confirmed: 5 halfwords copied big-endian from a 10-byte SRAM struct |
-| 10  | 20-21 | `FF FF` | Never written — **unused** |
-| 11  | 22-23 | varies (Unknown) | Computed via `bl 0x801c2ac; bl 0x801c468`. The increment pattern across Ken's traces (186 → 372 over minutes) suggests an **accumulator/counter** rather than a voltage |
+| 10  | 20-21 | `FF FF` | Never written - **unused** |
+| 11  | 22-23 | varies (Unknown) | Computed via `bl 0x801c2ac; bl 0x801c468`. The increment pattern across Ken's traces (186 -> 372 over minutes) suggests an **accumulator/counter** rather than a voltage |
 | 12  | 24-25 | `0x0030`=48 | Init writes literal `0x30`; constant. Possibly a **hardware revision** field |
-| 13  | 26-27 | `0x0BCE`=3022 — Firmware Version | Confirmed exactly: `movw r0, #0xbce; strh r0, [r4, #0x1a]` |
-| 14  | 28-29 | (Unknown) | Set to 0 or 1 based on a flag byte — **boolean status** (charge/discharge active? balancing?) |
-| 15  | 30-31 | (Unknown) | OR-mask of 3 conditional bits (#1, #2, #4) — **3-flag composite status** |
-| 16  | 32-33 | (Unknown) | Single byte loaded from RAM — **mode/state byte** |
-| 17  | 34-35 | varies | Low 16 bits of a 32-bit value built from 6 bytes via `bl 0x80011dc` (digit-decoder) — **half of an encoded production ID/hash** |
+| 13  | 26-27 | `0x0BCE`=3022 - Firmware Version | Confirmed exactly: `movw r0, #0xbce; strh r0, [r4, #0x1a]` |
+| 14  | 28-29 | (Unknown) | Set to 0 or 1 based on a flag byte - **boolean status** (charge/discharge active? balancing?) |
+| 15  | 30-31 | (Unknown) | OR-mask of 3 conditional bits (#1, #2, #4) - **3-flag composite status** |
+| 16  | 32-33 | (Unknown) | Single byte loaded from RAM - **mode/state byte** |
+| 17  | 34-35 | varies | Low 16 bits of a 32-bit value built from 6 bytes via `bl 0x80011dc` (digit-decoder) - **half of an encoded production ID/hash** |
 | 18  | 36-37 | `0x389D`=14493 | High 16 bits of the same 32-bit value. **17 + 18 are one logical 32-bit field** |
-| 19  | 38-39 | varies | OR-mask of 8 conditional bits (`#1, #2, #4, #8, #0x10, #0x20, #0x40, #0x80`) — **8-flag fault/warning composite** |
-| 23  | 46-47 | `0xFFF2`/`0x004E` — Ken: "Current?" | Likely correct: `0xFFF2` = −14 as signed int16, `0x004E` = +78. Sign flips across samples = direction reversal. **Signed pack current**, probably in 0.01 A units |
-| 25  | 50-51 | `0x2328`=9000 (Unknown) | Written via `(raw << 4) & 0x3FFFC` at flash `0x0800d78c`. 9000 in 0.01 A units = **90.00 A — likely the continuous discharge current limit** |
+| 19  | 38-39 | varies | OR-mask of 8 conditional bits (`#1, #2, #4, #8, #0x10, #0x20, #0x40, #0x80`) - **8-flag fault/warning composite** |
+| 23  | 46-47 | `0xFFF2`/`0x004E` - Ken: "Current?" | Likely correct: `0xFFF2` = -14 as signed int16, `0x004E` = +78. Sign flips across samples = direction reversal. **Signed pack current**, probably in 0.01 A units |
+| 25  | 50-51 | `0x2328`=9000 (Unknown) | Written via `(raw << 4) & 0x3FFFC` at flash `0x0800d78c`. 9000 in 0.01 A units = **90.00 A - likely the continuous discharge current limit** |
 
 Regs 20, 21, 22, 24, 26, 27 are written somewhere outside the init/update functions found so far; static analysis didn't pin them down without more work.
 
-### Cell voltages on FC04 — resolves a potential ambiguity
+### Cell voltages on FC04 - resolves a potential ambiguity
 
-The firmware's FC04 handler at `0x0800debc` populates responses from a per-pack 145-byte structure at SRAM `0x20003D6A` (one structure per pack; up to 6 packs supported, indexed by slave_address − 1).
+The firmware's FC04 handler at `0x0800debc` populates responses from a per-pack 145-byte structure at SRAM `0x20003D6A` (one structure per pack; up to 6 packs supported, indexed by slave_address - 1).
 
-Inside that handler, one code path stores cell voltages with a `−2730` offset (`0xAAA` = 2730 mV = LiFePO4 lower-cutoff baseline). This led to an initial misconception that cell voltages on the wire would be offset. **Ken's empirical Block 3 readings (e.g. `0D 07 = 3335 mV`) confirm that the values reaching the inverter on FC04 are raw millivolts**, not offset. The `−2730` path is likely a leftover from internal storage or the inter-pack PACE encoding. An emulator can send raw mV, big-endian, with no transform.
+Inside that handler, one code path stores cell voltages with a `-2730` offset (`0xAAA` = 2730 mV = LiFePO4 lower-cutoff baseline). This led to an initial misconception that cell voltages on the wire would be offset. **Ken's empirical Block 3 readings (e.g. `0D 07 = 3335 mV`) confirm that the values reaching the inverter on FC04 are raw millivolts**, not offset. The `-2730` path is likely a leftover from internal storage or the inter-pack PACE encoding. An emulator can send raw mV, big-endian, with no transform.
 
 ### Implications for emulator implementation
 
 For a slave that pretends to be a GivEnergy battery on the inverter's RS485 bus:
 
-1. **9600 baud, 8N1, standard Modbus-RTU** — confirmed both empirically and from firmware.
-2. **Implement FC03 + FC04 only** — FC06 is in the firmware but not part of the inverter's poll cycle.
-3. **Slave address = battery position** (1, 2, …), set by dipswitches on real units.
+1. **9600 baud, 8N1, standard Modbus-RTU** - confirmed both empirically and from firmware.
+2. **Implement FC03 + FC04 only** - FC06 is in the firmware but not part of the inverter's poll cycle.
+3. **Slave address = battery position** (1, 2, ...), set by dipswitches on real units.
 4. **HR response**: 28 registers (`0x1C`), 56-byte payload, layout per Ken's HR table.
 5. **IR responses**: three blocks (`0x00..0x14`, `0x15..0x27`, `0x28..0x3C`).
 6. **Cell voltages**: raw millivolts, big-endian, IR Block 3 starting at byte 0.
@@ -258,10 +258,10 @@ Bitmask fields (regs 14, 15, 19) and varying counters (reg 11) can probably be s
 
 The firmware binaries are distributed by GivEnergy as part of their "BMS update" tooling. Once obtained, basic analysis can be done with [Capstone](https://www.capstone-engine.org/) (Python bindings), Ghidra, or any STM32-aware disassembler. Useful entry points to start from:
 
-- File offset 4 onwards — Cortex-M vector table, includes the reset vector
-- Flash `0x0800e1b8` — Modbus FC dispatcher (CMP r0, #3 / #4 / #6 chain)
-- Flash `0x0800dd82` — FC03 handler (the one that does `for i: tx.append(htons(table[i]))`)
-- Flash `0x0800debc` — FC04 handler (populates the per-pack TX buffer)
-- Flash `0x0800d534` — FC03 table init function (writes the constants Ken sees in unchanging fields)
-- SRAM `0x200039C0` — start of the 200-register holding table backing store
-- SRAM `0x2000385c` — Modbus RX/TX frame buffer
+- File offset 4 onwards - Cortex-M vector table, includes the reset vector
+- Flash `0x0800e1b8` - Modbus FC dispatcher (CMP r0, #3 / #4 / #6 chain)
+- Flash `0x0800dd82` - FC03 handler (the one that does `for i: tx.append(htons(table[i]))`)
+- Flash `0x0800debc` - FC04 handler (populates the per-pack TX buffer)
+- Flash `0x0800d534` - FC03 table init function (writes the constants Ken sees in unchanging fields)
+- SRAM `0x200039C0` - start of the 200-register holding table backing store
+- SRAM `0x2000385c` - Modbus RX/TX frame buffer
