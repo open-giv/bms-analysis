@@ -139,11 +139,11 @@ Traces
 |5 - 6|CD 33|Unknown (=52531) 52.531V??|
 |7 - 8|CF 85|Batt Voltage? (=53125) 53.125V??|
 |9 - 14|FF FF FF 35 00 00|Unknown|
-|15 - 16|4B C0|Battery Capacity (=19392mAh)|
+|15 - 16|4B C0|Battery Capacity (=193.92Ah)|
 |17 - 18|00 00|Unknown|
-|19 - 20|48 A8|Design Capacity (=18600mAh)|
+|19 - 20|48 A8|Design Capacity (=186.00Ah)|
 |21 - 22|00 00|Unknown|
-|23 - 24|46 7B|Remaining Capacity (=18043mAh)|
+|23 - 24|46 7B|Remaining Capacity (=180.43Ah)|
 |25 - 25|5D|State Of Charge (5D=93%)|
 |26 - 27|00 00||
 |28 - 29|0E 10|(=3600)|
