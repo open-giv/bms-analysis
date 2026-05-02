@@ -1,5 +1,7 @@
 # GivEnergy BMS Reverse Engineering Notes
 
+> **Note**: This document has been preserved as the original empirical analysis. For up-to-date documentation - including firmware static-analysis findings, FC=4 wire-format details, inverter-side analysis, and emulator design rules - see [README.md](README.md) for the new file index.
+
 These notes are a work-in-progress to document the BMS protocol used by GivEnergy batteries.  Now that GivEnergy support is no longer available, I hope this work can help with using GivEnergy batteries with 3rd party inverters and/or a way to monitor battery health.
 
 This analysis is based on a GivEnergy AC 3.0 inverter with a pair of GivEnergy Gen 2 9.5kWh batteries that are 'known good', by capturing the protocol exchanges between the inverter and the batteries.

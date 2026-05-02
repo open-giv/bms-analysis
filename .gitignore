@@ -4,3 +4,7 @@ modbus_register_logger
 *.log
 *.csv
 .~*#
+# scratch / working files (never publish)
+scratch/
+__pycache__/
+*.pyc
