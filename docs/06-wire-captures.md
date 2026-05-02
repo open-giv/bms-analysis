@@ -120,3 +120,21 @@ To resolve remaining open questions, useful targeted captures would be:
 | Inverter cold boot | First-byte-after-power-on probe sequence (if any) |
 | Imbalance condition | Balancing-active flag identification |
 | Multi-battery added/removed | "Slave appears" / "slave disappears" handling |
+
+## Validation campaign methodology
+
+The analysis in this repository was extended by running a controlled validation campaign against a real GivEnergy LV system, using three time-aligned data streams:
+
+1. **RS485 wire sniff** via `tools/serial_hexdump_logger.c` (a USB-RS485 dongle in parallel passive-tap mode at the inverter BMS terminal block).
+2. **Modbus TCP poll** of the inverter's local API via `tools/tcp_poller.py` at 1 Hz, providing the inverter's own published interpretation of BMS state -- used as ground-truth labels for wire-side decoding.
+3. **Scenario annotations** via `tools/tag.py`, manual at the boundary of forced transitions (force-charge, force-discharge, current-limit step) and auto-derived from the TCP stream's mode-change events.
+
+The three streams are post-hoc time-aligned via `tools/join_streams.py` into a single parquet keyed by NTP wall-clock timestamp. `tools/analysis_template.ipynb` provides a starting point for the analysis itself, structured as PACE-hypothesis-first per-unknown sections (see [09-pace-comparison.md](09-pace-comparison.md) for why PACE is the natural hypothesis source).
+
+To reproduce on your own system:
+
+1. Configure `~/.givenergy-redact.toml` with your serials and IPs (used by `tools/redact.py` before sharing any artefact).
+2. Run a 48-72 hour passive capture under your normal solar/load cycle.
+3. Optionally run a 30-45 minute active session forcing high-SoC dwell, low-SoC dwell, and current-limit changes.
+4. Run `tools/join_streams.py` to produce the parquet.
+5. Open `tools/analysis_template.ipynb`, point it at your capture directory, and work through each unknown section.
