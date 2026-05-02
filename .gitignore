@@ -6,5 +6,11 @@ modbus_register_logger
 .~*#
 # scratch / working files (never publish)
 scratch/
+# Python
 __pycache__/
 *.pyc
+.pytest_cache/
+.venv/
+*.egg-info/
+build/
+dist/
