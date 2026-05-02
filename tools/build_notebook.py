@@ -31,7 +31,8 @@ def build():
         "and work through each unknown section. Each section starts with the most "
         "likely PACE hypothesis and falls through to general analysis if the PACE "
         "hypothesis does not fit.\n\n"
-        "Spec: `givenergy-local/docs/superpowers/specs/2026-05-02-bms-validation-lab-design.md`"
+        "This notebook is the analyst's starting point for a validation-lab campaign capture "
+        "(see `docs/06-wire-captures.md` for the methodology)."
     ))
 
     cells.append(_md("## Setup"))
@@ -41,7 +42,7 @@ def build():
         "import numpy as np\n"
         "import matplotlib.pyplot as plt\n"
         "\n"
-        "CAPTURE = Path('/Users/jonw/givenergy/captures/2026-05-XX-passive-48h')\n"
+        "CAPTURE = Path('path/to/your/capture/directory')  # set this to your captures directory before running\n"
         "df = pd.read_parquet(CAPTURE / 'joined.parquet')\n"
         "print(df.shape, df.columns.tolist())\n"
     ))
@@ -49,7 +50,7 @@ def build():
     cells.append(_md("## PACE reference"))
     cells.append(_code(
         "import sys\n"
-        "sys.path.insert(0, str(Path('.').resolve().parent / 'tools'))\n"
+        "sys.path.insert(0, str(Path('.').resolve().parent))\n"
         "from tools.pace_reference import (\n"
         "    PACK_ALARM_BITS, PACK_STATUS_BITS, PROTECTION_FIELD_NAMES,\n"
         ")\n"

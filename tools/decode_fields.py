@@ -71,9 +71,9 @@ def decode_ir_block2(data: bytes) -> Dict[str, Any]:
       Byte   0:    Number of cells (e.g. 0x10 = 16)
       Bytes  1-2:  Cycle count (uint16)
       Bytes  7-8:  Pack voltage, 0.001 V scale = mV (uint16; e.g. 0xCF85 = 53125 mV)
-      Bytes 15-16: Total (calibrated) capacity in 0.1 Ah units (uint16)
-      Bytes 19-20: Design capacity in 0.1 Ah units (uint16)
-      Bytes 23-24: Remaining capacity in 0.1 Ah units (uint16)
+      Bytes 15-16: Total (calibrated) capacity in 0.01 Ah units / centi-Ah (uint16)
+      Bytes 19-20: Design capacity in 0.01 Ah units / centi-Ah (uint16)
+      Bytes 23-24: Remaining capacity in 0.01 Ah units / centi-Ah (uint16)
       Byte  25:    State of Charge in percent (0-100)
       Bytes 35-36: BMS firmware version (uint16; e.g. 0x0BCE = 3022)
     """
@@ -83,9 +83,9 @@ def decode_ir_block2(data: bytes) -> Dict[str, Any]:
         "cell_count": data[0],
         "cycle_count": _u16_be(data, 1),
         "pack_voltage_mV": _u16_be(data, 7),
-        "total_cap_0p1Ah": _u16_be(data, 15),
-        "design_cap_0p1Ah": _u16_be(data, 19),
-        "remain_cap_0p1Ah": _u16_be(data, 23),
+        "total_cap_cAh": _u16_be(data, 15),
+        "design_cap_cAh": _u16_be(data, 19),
+        "remain_cap_cAh": _u16_be(data, 23),
         "soc_pct": data[25],
         "fw_version": _u16_be(data, 35),
     }

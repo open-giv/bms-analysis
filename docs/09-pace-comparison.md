@@ -68,10 +68,10 @@ struct pack_state {
     int16_t  temp_decidegC[5];   // signed, raw on the wire (subw bias is firmware-internal)
     int16_t  pack_current_dA;    // signed deciAmps
     uint16_t pack_voltage_mV;
-    uint16_t total_cap_0p1Ah;
-    uint16_t remain_cap_0p1Ah;
+    uint16_t total_cap_cAh;
+    uint16_t remain_cap_cAh;
     uint8_t  soc_pct;
-    uint16_t design_cap_0p1Ah;   // GivEnergy explicit
+    uint16_t design_cap_cAh;   // GivEnergy explicit
     uint16_t cycle_count;
     char     serial[20];
     uint16_t firmware_version;   // e.g. 0x0BCE
@@ -105,7 +105,7 @@ Most field-by-field translations are direct:
 | `pack_voltage_mV` | divide by 10 -> `BatteryVoltage` (0.01 V) |
 | `pack_current_dA` | already 0.1 A -> `BatteryCurrent` direct |
 | `soc_pct` | direct |
-| `total_cap_0p1Ah` | direct -> `RatedCapacity` (0.1 Ah) |
+| `total_cap_cAh` | divide by 10 -> `RatedCapacity` (0.1 Ah) |
 | `cell_mV[]` | compute min/max -> `MinCellVoltage`, `MaxCellVoltage` (1 mV) |
 | `temp_decidegC[]` | compute min/max -> `MinCellTemperature`, `MaxCellTemperature` (0.1 deg C) |
 | `current_limit_dA` | -> `MaxChargeCurrent` and `MaxDischargeCurrent` (0.1 A) |
