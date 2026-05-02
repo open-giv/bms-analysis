@@ -16,9 +16,9 @@ A reference for terms used throughout this documentation. Aimed at readers who a
 
 **8N1**: Serial framing - 8 data bits, No parity, 1 stop bit per byte. The standard configuration for Modbus-RTU.
 
-**Baud rate**: Bits per second on the wire. The GivEnergy BMS bus runs at 9600 baud (= 9600 bits/sec ≈ 960 bytes/sec accounting for start/stop bits).
+**Baud rate**: Bits per second on the wire. The GivEnergy BMS bus runs at 9600 baud (= 9600 bits/sec ~ 960 bytes/sec accounting for start/stop bits).
 
-**Frame**: A complete Modbus message - one request or one response. Frames are delimited by inter-frame silence (≥3.5 character times of no transmission, ~3.6 ms at 9600 baud).
+**Frame**: A complete Modbus message - one request or one response. Frames are delimited by inter-frame silence (>=3.5 character times of no transmission, ~3.6 ms at 9600 baud).
 
 ## Modbus function codes
 

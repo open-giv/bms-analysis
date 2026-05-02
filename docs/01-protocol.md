@@ -9,7 +9,7 @@ GivEnergy LV BMSes speak Modbus-RTU on RS485, with one important non-standard qu
 | Bus | RS485, multidrop |
 | Baud rate | 9600 |
 | Framing | 8N1 (8 data bits, no parity, 1 stop bit) |
-| Inter-frame silence | Standard Modbus-RTU (≥3.5 char times = ~3.6 ms at 9600) |
+| Inter-frame silence | Standard Modbus-RTU (>=3.5 char times = ~3.6 ms at 9600) |
 
 The bus is multidrop, so multiple devices can share it. A single inverter polls multiple battery slaves on one cable.
 
@@ -21,9 +21,9 @@ The BMS firmware implements only **three** Modbus function codes:
 
 | FC | Name | Direction | Use |
 |---|---|---|---|
-| `0x03` | Read Holding Registers | inverter → BMS | Status / config registers (HR poll) |
-| `0x04` | Read Input Registers | inverter → BMS | Telemetry registers (cells, capacities, temps) |
-| `0x06` | Write Single Holding Register | inverter → BMS | Mode-change commands (rare; not seen in steady-state polling) |
+| `0x03` | Read Holding Registers | inverter -> BMS | Status / config registers (HR poll) |
+| `0x04` | Read Input Registers | inverter -> BMS | Telemetry registers (cells, capacities, temps) |
+| `0x06` | Write Single Holding Register | inverter -> BMS | Mode-change commands (rare; not seen in steady-state polling) |
 
 Any other FC produces a Modbus exception response with code `1` ("Illegal Function"). This was confirmed by static analysis of the BMS firmware (the dispatcher hard-codes a `cmp #3 / cmp #4 / cmp #6` chain before defaulting to the exception path).
 
@@ -67,7 +67,7 @@ The HR-poll response uses standard Modbus framing:
 [slave_addr] [0x03] [byte_count] [data...] [crc_lo] [crc_hi]
 ```
 
-`byte_count` = count × 2.
+`byte_count` = count x 2.
 
 ## Response format - FC=4 (NON-STANDARD)
 
@@ -77,7 +77,7 @@ The IR-poll response does **not** include a byte_count field. Instead, it echoes
 [slave_addr] [0x04] [addr_echo_hi] [addr_echo_lo] [data...] [crc_lo] [crc_hi]
 ```
 
-Data length is implicit from the request's count × 2.
+Data length is implicit from the request's count x 2.
 
 This is the most important pitfall for emulator implementations. **A stock Modbus library will produce standard FC=4 responses with byte_count, which the inverter will reject** (CRC mismatch because the byte at offset 2 differs from what the inverter computed).
 

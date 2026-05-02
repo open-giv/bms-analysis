@@ -17,7 +17,7 @@ The spec below is derived from the BMS firmware static analysis ([04](04-bms-fir
 | Bus | RS485, 9600 baud, 8N1 |
 | Modbus variant | Modbus-RTU |
 | CRC | CRC-16, polynomial `0xA001`, init `0xFFFF`, low byte first on the wire |
-| Inter-frame silence | ≥3.5 char times (~3.6 ms at 9600 baud) |
+| Inter-frame silence | >=3.5 char times (~3.6 ms at 9600 baud) |
 
 ### 2. Function code support
 
@@ -38,7 +38,7 @@ Standard Modbus FC=4:           slave | FC | byte_count(1) | data | CRC
 GivEnergy BMS FC=4:             slave | FC | addr_echo_hi | addr_echo_lo | data | CRC
 ```
 
-The emulator must echo the request's start address (2 bytes, big-endian) in place of the byte_count. Data length is implicit from the request's count × 2.
+The emulator must echo the request's start address (2 bytes, big-endian) in place of the byte_count. Data length is implicit from the request's count x 2.
 
 A stock pymodbus / umodbus / similar will produce standard FC=4 frames - which the inverter rejects on CRC mismatch. **You must implement FC=4 framing manually** or fork the library.
 
@@ -69,7 +69,7 @@ The strictest validation seen across inverter variants:
 | Field | Acceptable range | On out-of-range |
 |---|---|---|
 | Per-cell voltage | strictly between 2200 and 3700 mV | Silently dropped; UI shows "stuck" cell |
-| Temperatures | strictly between -30.0 and +70.0 °C | Same silent-drop |
+| Temperatures | strictly between -30.0 and +70.0 degC | Same silent-drop |
 | Pack current | abs value < 60000 (signed int16) | Probably flagged |
 
 Stay inside these envelopes for portable emulation. Realistic LiFePO4 values (~3.2-3.4 V/cell at typical SoC, ambient temperature) easily satisfy them.
@@ -99,7 +99,7 @@ See [02-holding-registers.md](02-holding-registers.md) for full layout. Key valu
 | Reg | Value | Notes |
 |---:|---|---|
 | 0 | `0x0065` (101) | Fixed device-marker constant - always send this |
-| 1-4 | `0xFFFF` × 4 | Reserved / unused |
+| 1-4 | `0xFFFF` x 4 | Reserved / unused |
 | 5-9 | ASCII serial padded to 20 chars | E.g. `"EM2024G001          "` (ends with NUL byte) |
 | 10 | `0xFFFF` | Reserved |
 | 11 | `0x00BA` initially | Possibly transitions to `0x0174` after some condition - emulator can leave it static at `0x00BA` |
@@ -127,7 +127,7 @@ See [02-holding-registers.md](02-holding-registers.md) for full layout. Key valu
 ```
 [serial 20 bytes ASCII padded with spaces, NUL-terminated]
 00 00                              ; reserved
-[5 × 2-byte temperatures, 0.1 °C BE]   ; e.g. 00 C8 00 C8 00 C8 00 C8 00 C8 = 20.0 °C × 5
+[5 x 2-byte temperatures, 0.1 degC BE]   ; e.g. 00 C8 00 C8 00 C8 00 C8 00 C8 = 20.0 degC x 5
 00 01                              ; flag
 00 08                              ; "USB / accessory present" - claim 8 to mimic real BMS
 00 00 00 00 00 00                  ; reserved
@@ -148,7 +148,7 @@ FF FF FF 35 00 00                  ; mostly fixed pattern
 00 00
 [2-byte BE design capacity 0.1 Ah]      ; 0x48A8 = 186.00 Ah
 00 00
-[2-byte BE remaining capacity 0.1 Ah]   ; computed from SoC × design capacity
+[2-byte BE remaining capacity 0.1 Ah]   ; computed from SoC x design capacity
 [1-byte SoC %]                          ; 0-100
 00 00
 0E 10                              ; constant 3600
@@ -162,7 +162,7 @@ FF FF FF 35 00 00                  ; mostly fixed pattern
 40-byte data section:
 
 ```
-[16 × 2-byte BE cell voltages, raw mV]   ; 32 bytes total. 3.30 V cell = 0x0CE4
+[16 x 2-byte BE cell voltages, raw mV]   ; 32 bytes total. 3.30 V cell = 0x0CE4
 00 B3 00 A5                              ; cell-level diagnostics (varies)
 [2-byte BE max cell voltage mV]
 [2-byte BE min cell voltage mV]

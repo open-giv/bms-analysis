@@ -71,11 +71,11 @@ No per-register handler logic. The table is just a SRAM mirror that other tasks 
 
 ## FC=4 cell voltage encoding
 
-The FC=4 handler (`0x0800_DEBC`) populates a per-pack 145-byte structure at SRAM `0x2000_3D6A` (one structure per pack; up to 6 packs supported, indexed by `slave_address − 1`).
+The FC=4 handler (`0x0800_DEBC`) populates a per-pack 145-byte structure at SRAM `0x2000_3D6A` (one structure per pack; up to 6 packs supported, indexed by `slave_address - 1`).
 
-**Important**: inside that handler, one code path stores cell voltages with a `−2730` offset (`0xAAA` = 2730 mV = LiFePO4 lower-cutoff baseline). This led to an initial misconception that cell voltages on the wire would also be offset.
+**Important**: inside that handler, one code path stores cell voltages with a `-2730` offset (`0xAAA` = 2730 mV = LiFePO4 lower-cutoff baseline). This led to an initial misconception that cell voltages on the wire would also be offset.
 
-Wire captures confirm: **cell voltages reaching the inverter on FC=4 are raw millivolts, not offset.** The `−2730` path is for internal storage / inter-pack PACE encoding only. An emulator should send raw mV with no transform.
+Wire captures confirm: **cell voltages reaching the inverter on FC=4 are raw millivolts, not offset.** The `-2730` path is for internal storage / inter-pack PACE encoding only. An emulator should send raw mV with no transform.
 
 ## Inter-pack PACE channel (UART4)
 
@@ -85,7 +85,7 @@ The BMS firmware also implements a **PACE / Pylontech-compatible protocol on UAR
 - Standard PACE wire format: `~ VER ADR CID1 CID2 LENGTH INFO CHKSUM \r`
 - The `0xAAA` offset on cell voltages mentioned above is an artefact of this internal protocol
 
-This is independent of the inverter-side Modbus link and is not relevant for an inverter ↔ BMS emulator.
+This is independent of the inverter-side Modbus link and is not relevant for an inverter <-> BMS emulator.
 
 ## Bit-banged I2C EEPROM
 

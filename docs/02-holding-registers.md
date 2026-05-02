@@ -18,7 +18,7 @@ FC=3 uses standard Modbus framing (with byte_count, unlike FC=4). See [01-protoc
 | Average gap between requests | 245 ms |
 | Minimum gap | 231 ms |
 | Maximum gap | 481 ms |
-| BMS turnaround latency (req → rsp) | ~101 ms (p95: 103 ms; range 90-114 ms) |
+| BMS turnaround latency (req -> rsp) | ~101 ms (p95: 103 ms; range 90-114 ms) |
 | Slave addressed | 1 only (the primary battery; HR is never polled to other slaves) |
 
 The slave-1 hard-coding is confirmed both empirically and from inverter firmware analysis: the FA-series Gen 3 builder writes `movs r0, #1; strb r0, [sp]` for the slave byte unconditionally on the HR path.
@@ -30,10 +30,10 @@ The 28 registers (= 56 bytes) decoded at the byte level:
 | Reg | Bytes | Empirical observation | Firmware-derived interpretation |
 |----:|---|---|---|
 | 0   | 0-1   | constant `0x0065` (101) | Init writes literal `0x65`. Likely a **fixed protocol/device marker constant** (not the slave address - that's set by dipswitches). |
-| 1-4 | 2-9   | constant `0xFFFF` × 4 | Never written after the 0xFFFF init. **Truly unused / reserved.** |
+| 1-4 | 2-9   | constant `0xFFFF` x 4 | Never written after the 0xFFFF init. **Truly unused / reserved.** |
 | 5-9 | 10-19 | ASCII serial number (e.g. `DX2319G279`) | 5 halfwords copied big-endian from a 10-byte SRAM struct. |
 | 10  | 20-21 | constant `0xFFFF` | Never written. **Unused.** |
-| 11  | 22-23 | varies (e.g. `0x00BA → 0x0174` early in capture) | Computed by helper functions in the firmware. **State field** (a single transition was observed early in cold_start). Possibly a charge/discharge state marker. |
+| 11  | 22-23 | varies (e.g. `0x00BA -> 0x0174` early in capture) | Computed by helper functions in the firmware. **State field** (a single transition was observed early in cold_start). Possibly a charge/discharge state marker. |
 | 12  | 24-25 | constant `0x0030` (48) | Init writes literal `0x30`. Possibly a **hardware revision** field. |
 | 13  | 26-27 | constant `0x0BCE` (3022) | Confirmed: `movw r0, #0xbce; strh r0, [r4, #0x1a]`. **BMS firmware version.** |
 | 14  | 28-29 | constant `0x0000` early in capture | Set to 0 or 1 from a flag byte. **Boolean status** (not yet observed transitioning - needs labelled captures). |

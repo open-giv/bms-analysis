@@ -19,7 +19,7 @@ The blocks are not contiguous: there's a gap at register `0x003C` and beyond (no
 | Metric | Value |
 |---|---|
 | IR poll interval (per query) | ~10-12 seconds between repetitions of the same query |
-| Full slave × block sweep | ~3 minutes for 5 slaves × 3 blocks |
+| Full slave x block sweep | ~3 minutes for 5 slaves x 3 blocks |
 | BMS turnaround latency | 84-89 ms (faster than HR because responses are smaller) |
 | Slaves polled | 1, 2, 3, 4, 5 (all five regardless of which are populated) |
 
@@ -37,11 +37,11 @@ The inverter polls all five potential slave addresses (1..5) regardless of how m
 |---:|---:|---|---|
 | 0 | 20 | Serial number (ASCII, padded with spaces, NUL-terminated) | e.g. `DX2319G279` followed by 9 spaces and a NUL |
 | 20 | 2 | (unknown / 0x0000) | Always observed as zero |
-| 22 | 2 | Temperature sensor 1 | 0.1 °C units, big-endian (e.g. `0x00AB` = 17.1 °C) |
-| 24 | 2 | Temperature sensor 2 | 0.1 °C units (e.g. `0x00B2` = 17.8 °C) |
-| 26 | 2 | Temperature sensor 3 | 0.1 °C units |
-| 28 | 2 | Temperature sensor 4 | 0.1 °C units |
-| 30 | 2 | Temperature sensor 5 | 0.1 °C units |
+| 22 | 2 | Temperature sensor 1 | 0.1 degC units, big-endian (e.g. `0x00AB` = 17.1 degC) |
+| 24 | 2 | Temperature sensor 2 | 0.1 degC units (e.g. `0x00B2` = 17.8 degC) |
+| 26 | 2 | Temperature sensor 3 | 0.1 degC units |
+| 28 | 2 | Temperature sensor 4 | 0.1 degC units |
+| 30 | 2 | Temperature sensor 5 | 0.1 degC units |
 | 32 | 2 | (unknown, observed `0x0001`) | Possibly a count or flag |
 | 34 | 2 | (unknown, observed `0x0008`) | Possibly USB / accessory presence flag |
 | 36 | 6 | (unknown, all zero) | Reserved / unused |
@@ -51,7 +51,7 @@ Example response data (slave 1 in cold_start.log, capture time 07:23:51):
 ```
 44 58 32 33 31 39 47 32 37 39 20 20 20 20 20 20 20 20 20 20    ; "DX2319G279" + 10 spaces
 00 00                                                          ; unknown
-00 ab 00 b2 00 ad 00 a5 00 a9                                  ; 5 temperatures (17.1, 17.8, 17.3, 16.5, 16.9 °C)
+00 ab 00 b2 00 ad 00 a5 00 a9                                  ; 5 temperatures (17.1, 17.8, 17.3, 16.5, 16.9 degC)
 00 01 00 08                                                    ; unknown flags
 00 00 00 00 00 00                                              ; unknown / reserved
 ```
@@ -105,7 +105,7 @@ a8 00 00 46 7b 5d 00 00 0e 10 00 00 00 00 00 0b ce 00
 | 36 | 2 | Max cell voltage | `0x0D09` = 3337 mV (slightly higher than the highest individual cell) |
 | 38 | 2 | Min cell voltage | `0x0D05` = 3333 mV |
 
-> **Cell voltage encoding**: Cell voltages on the wire are **raw millivolts**, big-endian, 2 bytes per cell. Despite the BMS firmware internally storing cells with a `−2730` offset (an artefact of inter-pack PACE protocol encoding), the wire format to the inverter is plain mV. Don't apply any offset in an emulator. See [04-bms-firmware.md](04-bms-firmware.md) for the firmware code path.
+> **Cell voltage encoding**: Cell voltages on the wire are **raw millivolts**, big-endian, 2 bytes per cell. Despite the BMS firmware internally storing cells with a `-2730` offset (an artefact of inter-pack PACE protocol encoding), the wire format to the inverter is plain mV. Don't apply any offset in an emulator. See [04-bms-firmware.md](04-bms-firmware.md) for the firmware code path.
 
 Example (slave 1 in cold_start.log):
 

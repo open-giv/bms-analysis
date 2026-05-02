@@ -6,7 +6,7 @@ This document covers the methodology for capturing RS485 traffic between the inv
 
 A USB-RS485 dongle in monitor (passive listen) mode is sufficient. Tested with:
 
-- [Waveshare USB to RS485](https://www.waveshare.com/usb-to-rs485.htm) (~£10-15, isolated, recommended)
+- [Waveshare USB to RS485](https://www.waveshare.com/usb-to-rs485.htm) (~GBP 10-15, isolated, recommended)
 
 Any FT232R or CH340-based USB-RS485 dongle works. Cheaper CP2102+SP485E modules can have signal-integrity issues - the Waveshare with a proper isolated transceiver is more reliable.
 
@@ -45,7 +45,7 @@ The parser correctly handles:
 - The non-standard FC=4 response format (length implicit from the matching request's count, not from a byte_count field)
 - Multi-flush frames (concatenated by content, not just timestamps)
 - Out-of-sync recovery (skips malformed bytes, retries decode)
-- Request → response pairing (matches each response to the immediately preceding request)
+- Request -> response pairing (matches each response to the immediately preceding request)
 
 Run on a logger output file:
 
@@ -71,13 +71,13 @@ The reference capture (`cold_start.log` from @kenbell) was a 3.4-minute window s
 | Query | Count | Avg gap | Min | Max |
 |---|---:|---:|---:|---:|
 | Slave 1 HR poll (FC=3, start=0, count=28) | 831 | 245.2 ms | 231 ms | 481 ms |
-| Slave N IR Block 1 (FC=4, start=0, count=21) | 9 (= 1× 5 slaves + duplicates) | ~10 s | - | - |
+| Slave N IR Block 1 (FC=4, start=0, count=21) | 9 (= 1x 5 slaves + duplicates) | ~10 s | - | - |
 | Slave N IR Block 2 (FC=4, start=0x15, count=19) | 5 | ~10 s | - | - |
 | Slave N IR Block 3 (FC=4, start=0x28, count=20) | 4 | ~10 s | - | - |
 
 The HR poll dominates. IR queries are interleaved opportunistically.
 
-### BMS turnaround latencies (request → response gap)
+### BMS turnaround latencies (request -> response gap)
 
 | Query | n | mean | p50 | p95 | min | max |
 |---|---:|---:|---:|---:|---:|---:|

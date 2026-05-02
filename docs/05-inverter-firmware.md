@@ -54,11 +54,11 @@ The inverter validates BMS responses against various sanity checks. The strictes
 | Field | Acceptable range | Behaviour on out-of-range |
 |---|---|---|
 | Per-cell voltage | strictly between 2200 and 3700 mV (i.e. `(2200, 3700)` exclusive) | Silently dropped; RAM keeps last good value (no fault flag) |
-| Temperatures | strictly between -30.0 and +70.0 °C | Same silent-drop behaviour |
+| Temperatures | strictly between -30.0 and +70.0 degC | Same silent-drop behaviour |
 | Pack current | absolute value < 60000 (signed 32-bit) | Likely flagged but not blocking |
 | No-response timeout | ~20 main-loop ticks before raising "BMS comms failure" | Status bit raised; UI may show "BMS lost" |
 
-The validation only applies to fields that come back in known-format responses (e.g. cell voltages are validated when the response byte_count matches expected = 40 for 20 cells × 2 bytes). Unknown-format responses skip validation entirely.
+The validation only applies to fields that come back in known-format responses (e.g. cell voltages are validated when the response byte_count matches expected = 40 for 20 cells x 2 bytes). Unknown-format responses skip validation entirely.
 
 **For an emulator**: keep simulated values inside these envelopes. If you fall outside, the inverter silently drops the reading and uses the previous value - usually visible as "stuck" cell voltages in the inverter UI.
 
