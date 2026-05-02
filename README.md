@@ -35,8 +35,9 @@ The original empirical analysis - hardware setup, RS485 captures, raw hex traces
 
 | File | Purpose |
 |---|---|
-| [tools/serial_hexdump_logger.c](tools/serial_hexdump_logger.c) | Logs RS485 traffic with timestamps to a file (Ken's original utility) |
-| [tools/parse_log.py](tools/parse_log.py) | Parses serial_hexdump_logger output into Modbus frames with cadence/latency analysis |
+| [tools/serial_hexdump_logger.c](tools/serial_hexdump_logger.c) | Logs all RS485 traffic with timestamps to a file. Useful for protocol analysis. |
+| [tools/modbus_register_logger.c](tools/modbus_register_logger.c) | Passively watches the bus for reads/responses involving a specific register, logs that register's value over time (text or CSV). Useful for tracking how a single field varies under known conditions. |
+| [tools/parse_log.py](tools/parse_log.py) | Parses serial_hexdump_logger output into Modbus frames with cadence/latency analysis. Handles GivEnergy's non-standard FC=4 framing. |
 
 ## System scope
 
