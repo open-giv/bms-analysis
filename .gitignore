@@ -1,2 +1,6 @@
 wave_captures
 serial_hexdump_logger
+modbus_register_logger
+*.log
+*.csv
+.~*#
