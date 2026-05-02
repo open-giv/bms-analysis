@@ -37,3 +37,21 @@ async def test_poll_loop_writes_one_ndjson_record_per_fetch(tmp_path):
     assert "ts" in rec0
     rec1 = json.loads(lines[1])
     assert rec1["fields"]["inverter_mode"] == "charge"
+
+
+@pytest.mark.asyncio
+async def test_poll_loop_writes_nothing_when_max_iterations_zero(tmp_path):
+    out = tmp_path / "tcp.ndjson"
+    src = FakeSource([{"x": 1}])
+    await poll_loop(src, out, interval=0.0, max_iterations=0)
+    assert not out.exists() or out.read_text() == ""
+    assert src.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_poll_loop_stops_when_source_exhausted(tmp_path):
+    out = tmp_path / "tcp.ndjson"
+    src = FakeSource([])  # immediately exhausted
+    await poll_loop(src, out, interval=0.0, max_iterations=10)
+    assert not out.exists() or out.read_text() == ""
+    assert src.calls == 0
