@@ -53,47 +53,49 @@ The 28 registers (= 56 bytes) decoded at the byte level:
 
 ### Register 19 Bits
 
+Register 19 seems to be a set of status bits, indicating the BMS status to the inverter.
+
 | Bit | Meaning (if set) | Analysis |
 |-----|------------------|----------|
 | 1 (lsb) | Discharging | From protocol analysis and from sign of `*(int*)0x2000014C` |
-| 2 |||
-| 3 |||
-| 4 |||
-| 5 |||
-| 6 |||
-| 7 |||
-| 8 |||
-| 9 || Unused |
-| 10 || Unused |
-| 11 || Unused |
-| 12 || Unused |
-| 13 || Unused |
-| 14 || Unused |
-| 15 || Unused |
-| 16 (msb) || Unused |
+| 2 ||Normally high|
+| 3 |Request Charge?|Normally high, low for extended period of min SOC|
+| 4 |Battery MOSFETs enabled?|Normally high, oscillates below 4% SOC and near 100% SOC during calibration|
+| 5 ||Normally low|
+| 6 |Forbid Charge?|Normally low, high briefly at max SOC during calibration|
+| 7 |Allow Discharge?|Normally high, low at minimum SOC during calibration|
+| 8 |Allow Charge and Discharge?|Appears related to bits 6 & 7 - normally high, low when bit 7 low or bit 6 high|
+| 9 || Unused? |
+| 10 || Unused? |
+| 11 || Unused? |
+| 12 || Unused? |
+| 13 || Unused? |
+| 14 || Unused? |
+| 15 || Unused? |
+| 16 (msb) || Unused? |
 
 ### Register 20 Bits
 
-Register 20 is most likely a set of alarm bits collated from all packs using OR.
+Register 20 is a set of alarm bits collated from all packs.  From the values seen, it appears to directly correspond to the bits labelled `BMS xxx` in GivTCP `battery_fault_code` (see [GivTCP register.py](https://github.com/britkat1980/giv_tcp/blob/b6a3ba85c5d81f0acaad0e574fccb902aa23b03c/GivTCP/givenergy_modbus_async/model/register.py#L216))
 
 | Bit | Meaning (if set) | Analysis |
 |-----|------------------|----------|
-| 1 (lsb) | |  |
-| 2 |||
-| 3 | Over-voltage | From protocol analysis during calibration cycle, seen briefly at end of calibration (max SOC)|
-| 4 | Under-voltage | From protocol analysis during calibration cycle, seen at minimum SOC|
-| 5 |||
-| 6 |||
-| 7 |||
-| 8 |||
-| 9 || Unused |
-| 10 || Unused |
-| 11 || Unused |
-| 12 || Unused |
-| 13 || Unused |
-| 14 || Unused |
-| 15 || Unused |
-| 16 (msb) || Unused |
+| 1 (lsb) | Over Current | From GivTCP, battery status enum |
+| 2 | Short Current | From GivTCP, battery status enum |
+| 3 | Over Voltage | From protocol analysis during calibration cycle, seen briefly at end of calibration (max SOC) and from GivTCP, battery status enum |
+| 4 | Under Voltage | From protocol analysis during calibration cycle, seen at minimum SOC and from GivTCP, battery status enum |
+| 5 | Discharge over temperature | From GivTCP, battery status enum |
+| 6 | Charge over temperature | From GivTCP, battery status enum |
+| 7 | Discharge under temperature | From GivTCP, battery status enum |
+| 8 | Charge under temperature | From GivTCP, battery status enum |
+| 9 || Unused? |
+| 10 || Unused? |
+| 11 || Unused? |
+| 12 || Unused? |
+| 13 || Unused? |
+| 14 || Unused? |
+| 15 || Unused? |
+| 16 (msb) || Unused? |
 
 ## Field-variation analysis
 
