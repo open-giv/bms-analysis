@@ -4,7 +4,7 @@ A reference for terms used throughout this documentation. Aimed at readers who a
 
 ## Protocol terms
 
-**Modbus / Modbus-RTU**: A simple master-slave protocol widely used in industrial and embedded systems. "RTU" = Remote Terminal Unit, the binary variant (as opposed to ASCII). One device (the master) sends requests; one or more devices (slaves) respond. Each frame includes a slave address, a function code, payload, and a CRC.
+**Modbus / Modbus-RTU**: A simple controller-device protocol widely used in industrial and embedded systems. "RTU" = Remote Terminal Unit, the binary variant (as opposed to ASCII). The controller sends requests; one or more devices respond. Each frame includes a device address, a function code, payload, and a CRC.
 
 **RS485**: A robust, differential, multidrop electrical bus standard for serial data. Allows multiple devices on the same pair of wires, with longer cable runs than RS232 (up to ~1.2 km). The GivEnergy BMS link uses RS485.
 
@@ -26,7 +26,7 @@ A reference for terms used throughout this documentation. Aimed at readers who a
 
 ## Modbus function codes
 
-Function codes (FC) tell the slave what operation to perform. The byte after the slave address.
+Function codes (FC) tell the device what operation to perform. The byte after the device address.
 
 | FC | Hex | Name | Description |
 |---:|---|---|---|
@@ -38,11 +38,11 @@ Function codes (FC) tell the slave what operation to perform. The byte after the
 
 The GivEnergy BMS only implements **FC=3, FC=4, and FC=6**. Other FCs return a Modbus exception.
 
-**HR / Holding Register**: A 16-bit register in the slave's "read/write" register space (FC=3 reads them, FC=6 writes them).
+**HR / Holding Register**: A 16-bit register in the device's "read/write" register space (FC=3 reads them, FC=6 writes them).
 
-**IR / Input Register**: A 16-bit register in the slave's "read-only" register space (FC=4 reads them; there's no FC to write them).
+**IR / Input Register**: A 16-bit register in the device's "read-only" register space (FC=4 reads them; there's no FC to write them).
 
-**Modbus exception**: An error response from the slave. The FC byte has its high bit set (`FC | 0x80`); the next byte is the exception code (1 = Illegal Function, 2 = Illegal Address, etc.).
+**Modbus exception**: An error response from the device. The FC byte has its high bit set (`FC | 0x80`); the next byte is the exception code (1 = Illegal Function, 2 = Illegal Address, etc.).
 
 ## CRC
 
@@ -146,4 +146,4 @@ The GivEnergy BMS only implements **FC=3, FC=4, and FC=6**. Other FCs return a M
 
 **IR poll**: The lower-rate FC=4 queries the inverter sends to all batteries for telemetry. Three blocks per battery: Block 1 (regs 0..0x14), Block 2 (regs 0x15..0x27), Block 3 (regs 0x28..0x3C).
 
-**"Absent slave" pattern**: The distinctive empty response pattern (mostly zeros plus a recurring `f5 56 f5 56...` sequence) returned for slave addresses where no battery is physically present but the inverter still polls. See [03-input-registers.md](03-input-registers.md).
+**"Absent device" pattern**: The distinctive empty response pattern (mostly zeros plus a recurring `f5 56 f5 56...` sequence) returned for device addresses where no battery is physically present but the inverter still polls. See [03-input-registers.md](03-input-registers.md).

@@ -40,7 +40,7 @@ Timestamps are when the logger flushed - lines sharing a timestamp are bytes rec
 
 ## Parsing the captures
 
-[`tools/parse_log.py`](../tools/parse_log.py) reads `serial_hexdump_logger` output and reassembles complete Modbus frames using FC-determined length, validates the CRC of each frame, and produces structured output (per-frame role, slave, FC, latency, etc.).
+[`tools/parse_log.py`](../tools/parse_log.py) reads `serial_hexdump_logger` output and reassembles complete Modbus frames using FC-determined length, validates the CRC of each frame, and produces structured output (per-frame role, device, FC, latency, etc.).
 
 The parser correctly handles:
 
@@ -72,10 +72,10 @@ The reference capture (`cold_start.log` from @kenbell) was a 3.4-minute window s
 
 | Query | Count | Avg gap | Min | Max |
 |---|---:|---:|---:|---:|
-| Slave 1 HR poll (FC=3, start=0, count=28) | 831 | 245.2 ms | 231 ms | 481 ms |
-| Slave N IR Block 1 (FC=4, start=0, count=21) | 9 (= 1x 5 slaves + duplicates) | ~10 s | - | - |
-| Slave N IR Block 2 (FC=4, start=0x15, count=19) | 5 | ~10 s | - | - |
-| Slave N IR Block 3 (FC=4, start=0x28, count=20) | 4 | ~10 s | - | - |
+| Device 1 HR poll (FC=3, start=0, count=28) | 831 | 245.2 ms | 231 ms | 481 ms |
+| Device N IR Block 1 (FC=4, start=0, count=21) | 9 (= 1x 5 devices + duplicates) | ~10 s | - | - |
+| Device N IR Block 2 (FC=4, start=0x15, count=19) | 5 | ~10 s | - | - |
+| Device N IR Block 3 (FC=4, start=0x28, count=20) | 4 | ~10 s | - | - |
 
 The HR poll dominates. IR queries are interleaved opportunistically.
 
@@ -83,10 +83,10 @@ The HR poll dominates. IR queries are interleaved opportunistically.
 
 | Query | n | mean | p50 | p95 | min | max |
 |---|---:|---:|---:|---:|---:|---:|
-| Slave 1 HR poll | 831 | 101 ms | 101 | 103 | 90 | 114 |
-| Slave N IR Block 1 | 6 | 87 ms | 88 | 89 | 87 | 89 |
-| Slave N IR Block 2 | 5 | 84 ms | 84 | 84 | 83 | 84 |
-| Slave N IR Block 3 | 4 | 86 ms | 86 | 87 | 84 | 87 |
+| Device 1 HR poll | 831 | 101 ms | 101 | 103 | 90 | 114 |
+| Device N IR Block 1 | 6 | 87 ms | 88 | 89 | 87 | 89 |
+| Device N IR Block 2 | 5 | 84 ms | 84 | 84 | 83 | 84 |
+| Device N IR Block 3 | 4 | 86 ms | 86 | 87 | 84 | 87 |
 
 The HR turnaround is ~17 ms longer than IR because the HR response is larger (61 bytes vs 47 / 43 / 45) and that takes longer to TX at 9600 baud.
 
@@ -96,16 +96,16 @@ The HR turnaround is ~17 ms longer than IR because the HR response is larger (61
 
 The capture starts mid-stream with the HR poll loop already running. Observed:
 
-- **First 12 seconds**: HR poll only, every ~250 ms to slave 1
-- **+12s onwards**: First IR poll fires (slave 1 Block 1)
-- **+12s to +180s (cycle complete)**: Full 5-slave IR sweep across all 3 blocks, ~10s spacing
+- **First 12 seconds**: HR poll only, every ~250 ms to device 1
+- **+12s onwards**: First IR poll fires (device 1 Block 1)
+- **+12s to +180s (cycle complete)**: Full 5-device IR sweep across all 3 blocks, ~10s spacing
 - **HR poll never pauses** throughout
 
-There's no special boot probe or handshake - the inverter just immediately begins polling slave 1 after it sees the BMS is responsive.
+There's no special boot probe or handshake - the inverter just immediately begins polling device 1 after it sees the BMS is responsive.
 
-### "Absent slave" pattern
+### "Absent device" pattern
 
-Ken's setup has 2 batteries (slaves 1 and 2). The inverter still polls slaves 3, 4, 5 - and gets back specific empty-but-valid responses. See [03-input-registers.md](03-input-registers.md) for the byte-level pattern.
+Ken's setup has 2 batteries (devices 1 and 2). The inverter still polls devices 3, 4, 5 - and gets back specific empty-but-valid responses. See [03-input-registers.md](03-input-registers.md) for the byte-level pattern.
 
 ## Capture experiments worth running
 
@@ -119,7 +119,7 @@ To resolve remaining open questions, useful targeted captures would be:
 | Low-SoC condition (~10%) | Warning/fault bits in reg 19 |
 | Inverter cold boot | First-byte-after-power-on probe sequence (if any) |
 | Imbalance condition | Balancing-active flag identification |
-| Multi-battery added/removed | "Slave appears" / "slave disappears" handling |
+| Multi-battery added/removed | "Device appears" / "device disappears" handling |
 
 ## Validation campaign methodology
 

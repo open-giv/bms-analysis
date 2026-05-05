@@ -194,7 +194,7 @@ Analysis below is from firmware version **3022** (`0x0BCE`), which is the versio
 
 The firmware's Modbus dispatcher (function entry at flash `0x0800e1b8`) implements **FC03, FC04 and FC06 only**. Any other function code returns exception 0x80|FC with exception code 1 ("Illegal Function"). Maximum register count per FC03 / FC04 read is `0x80` (128) - exceeded counts return exception code 2 / 4.
 
-Frame buffer is at SRAM `0x2000385c`, layout: `[slave, FC, addr_hi, addr_lo, count_hi, count_lo]`. CRC handling is standard Modbus-RTU.
+Frame buffer is at SRAM `0x2000385c`, layout: `[device, FC, addr_hi, addr_lo, count_hi, count_lo]`. CRC handling is standard Modbus-RTU.
 
 This confirms Ken's empirical observation that the inverter only ever does reads - FC06 is in the firmware but not part of the inverter's normal poll cycle.
 
@@ -218,7 +218,7 @@ Same byte ranges as Ken's HR table above; this fills in many of his "Unknown" en
 
 | Reg | Bytes | Ken's empirical | Firmware-derived |
 |-----|-------|-----------------|------------------|
-| 0   | 0-1   | `0x0065`=101 (constant) | Init writes literal `0x65` once; persistent. Likely a **fixed protocol/device marker** (not the slave address - that's set by dipswitches) |
+| 0   | 0-1   | `0x0065`=101 (constant) | Init writes literal `0x65` once; persistent. Likely a **fixed protocol/device marker** (not the device address - that's set by dipswitches) |
 | 1-4 | 2-9   | `FF FF` × 4 | Never written by firmware after the 0xFFFF init - **truly unused** |
 | 5-9 | 10-19 | Serial Number | Confirmed: 5 halfwords copied big-endian from a 10-byte SRAM struct |
 | 10  | 20-21 | `FF FF` | Never written - **unused** |
@@ -238,17 +238,17 @@ Regs 20, 21, 22, 24, 26, 27 are written somewhere outside the init/update functi
 
 ### Cell voltages on FC04 - resolves a potential ambiguity
 
-The firmware's FC04 handler at `0x0800debc` populates responses from a per-pack 145-byte structure at SRAM `0x20003D6A` (one structure per pack; up to 6 packs supported, indexed by slave_address - 1).
+The firmware's FC04 handler at `0x0800debc` populates responses from a per-pack 145-byte structure at SRAM `0x20003D6A` (one structure per pack; up to 6 packs supported, indexed by device_address - 1).
 
 Inside that handler, one code path stores cell voltages with a `-2730` offset (`0xAAA` = 2730 mV = LiFePO4 lower-cutoff baseline). This led to an initial misconception that cell voltages on the wire would be offset. **Ken's empirical Block 3 readings (e.g. `0D 07 = 3335 mV`) confirm that the values reaching the inverter on FC04 are raw millivolts**, not offset. The `-2730` path is likely a leftover from internal storage or the inter-pack PACE encoding. An emulator can send raw mV, big-endian, with no transform.
 
 ### Implications for emulator implementation
 
-For a slave that pretends to be a GivEnergy battery on the inverter's RS485 bus:
+For a device that pretends to be a GivEnergy battery on the inverter's RS485 bus:
 
 1. **9600 baud, 8N1, standard Modbus-RTU** - confirmed both empirically and from firmware.
 2. **Implement FC03 + FC04 only** - FC06 is in the firmware but not part of the inverter's poll cycle.
-3. **Slave address = battery position** (1, 2, ...), set by dipswitches on real units.
+3. **Device address = battery position** (1, 2, ...), set by dipswitches on real units.
 4. **HR response**: 28 registers (`0x1C`), 56-byte payload, layout per Ken's HR table.
 5. **IR responses**: three blocks (`0x00..0x14`, `0x15..0x27`, `0x28..0x3C`).
 6. **Cell voltages**: raw millivolts, big-endian, IR Block 3 starting at byte 0.

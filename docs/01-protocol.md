@@ -11,9 +11,9 @@ GivEnergy LV BMSes speak Modbus-RTU on RS485, with one important non-standard qu
 | Framing | 8N1 (8 data bits, no parity, 1 stop bit) |
 | Inter-frame silence | Standard Modbus-RTU (>=3.5 char times = ~3.6 ms at 9600) |
 
-The bus is multidrop, so multiple devices can share it. A single inverter polls multiple battery slaves on one cable.
+The bus is multidrop, so multiple devices can share it. A single inverter polls multiple battery devices on one cable.
 
-Slave addresses are set per-battery via dipswitches; the value of the dipswitches is used directly as the Modbus slave ID. Typical configurations use slaves 1..5 for up to five paralleled batteries; the inverter polls all slave addresses 1..5 even if only some are populated (see [docs/03-input-registers.md](03-input-registers.md) for the "absent slave" pattern).
+Device addresses are set per-battery via dipswitches; the value of the dipswitches is used directly as the Modbus device ID. Typical configurations use devices 1..5 for up to five paralleled batteries; the inverter polls all device addresses 1..5 even if only some are populated (see [docs/03-input-registers.md](03-input-registers.md) for the "absent device" pattern).
 
 ## Function-code support
 
@@ -54,7 +54,7 @@ The BMS firmware uses the canonical Modbus auchCRCHi / auchCRCLo lookup tables i
 All Modbus requests from the inverter to the BMS are 8 bytes:
 
 ```
-[slave_addr] [FC] [addr_hi] [addr_lo] [count_hi or value_hi] [count_lo or value_lo] [crc_lo] [crc_hi]
+[device_addr] [FC] [addr_hi] [addr_lo] [count_hi or value_hi] [count_lo or value_lo] [crc_lo] [crc_hi]
 ```
 
 For FC=3 and FC=4, bytes 4-5 are the register count. For FC=6, they are the register value to write.
@@ -64,7 +64,7 @@ For FC=3 and FC=4, bytes 4-5 are the register count. For FC=6, they are the regi
 The HR-poll response uses standard Modbus framing:
 
 ```
-[slave_addr] [0x03] [byte_count] [data...] [crc_lo] [crc_hi]
+[device_addr] [0x03] [byte_count] [data...] [crc_lo] [crc_hi]
 ```
 
 `byte_count` = count x 2.
@@ -74,7 +74,7 @@ The HR-poll response uses standard Modbus framing:
 The IR-poll response does **not** include a byte_count field. Instead, it echoes the request's start address (2 bytes, big-endian):
 
 ```
-[slave_addr] [0x04] [addr_echo_hi] [addr_echo_lo] [data...] [crc_lo] [crc_hi]
+[device_addr] [0x04] [addr_echo_hi] [addr_echo_lo] [data...] [crc_lo] [crc_hi]
 ```
 
 Data length is implicit from the request's count x 2.
@@ -85,8 +85,8 @@ This is the most important pitfall for emulator implementations. **A stock Modbu
 
 The format is visible in the wire captures (Ken's `cold_start.log`). For example, an IR Block 2 exchange:
 
-- Request: `01 04 00 15 00 13 a0 03` - slave=1, FC=4, start=`0x0015`, count=`0x0013` (19 regs), CRC
-- Response: `01 04 00 15 10 02 e1 ...` - slave=1, FC=4, **`00 15`** = echoed start address (NOT byte_count), followed by data
+- Request: `01 04 00 15 00 13 a0 03` - device=1, FC=4, start=`0x0015`, count=`0x0013` (19 regs), CRC
+- Response: `01 04 00 15 10 02 e1 ...` - device=1, FC=4, **`00 15`** = echoed start address (NOT byte_count), followed by data
 
 If the format were standard, byte 2 of the response would be `0x26` (=38, the byte count for 19 registers). Instead it is `0x00`, and byte 3 is `0x15` (the request's start address low byte). Across all observed FC=4 responses, the value at bytes 2-3 is always exactly equal to the request's start address.
 

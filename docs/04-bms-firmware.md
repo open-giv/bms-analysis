@@ -44,12 +44,12 @@ Maximum register count per FC=3 / FC=4 read is `0x80` (128). Exceeding this retu
 | Function | Flash address | Notes |
 |---|---|---|
 | FC dispatcher entry | `0x0800_E1B8` | The cmp #3/#4/#6 chain |
-| FC=3 handler | `0x0800_DD82` | The for-loop that emits standard `slave + FC + byte_count + data + CRC` |
-| FC=4 handler | `0x0800_DEBC` | Emits the non-standard `slave + FC + addr_echo + data + CRC` |
+| FC=3 handler | `0x0800_DD82` | The for-loop that emits standard `device + FC + byte_count + data + CRC` |
+| FC=4 handler | `0x0800_DEBC` | Emits the non-standard `device + FC + addr_echo + data + CRC` |
 
 ## RX/TX frame buffer
 
-SRAM `0x2000_385C`. Layout: `[0]=slave_addr, [1]=FC, [2]=addr_hi, [3]=addr_lo, [4]=count_hi or value_hi, [5]=count_lo or value_lo`.
+SRAM `0x2000_385C`. Layout: `[0]=device_addr, [1]=FC, [2]=addr_hi, [3]=addr_lo, [4]=count_hi or value_hi, [5]=count_lo or value_lo`.
 
 ## FC=3 backing store - the holding-register table
 
@@ -71,7 +71,7 @@ No per-register handler logic. The table is just a SRAM mirror that other tasks 
 
 ## FC=4 field encoding (mixed: some raw, some `-2730`-offset)
 
-The FC=4 handler at `0x0800_DEBC` populates the response from a per-pack structure (145 bytes per pack at SRAM `0x2000_3D6A`, indexed by `slave_address - 1`, supports up to 6 packs).
+The FC=4 handler at `0x0800_DEBC` populates the response from a per-pack structure (145 bytes per pack at SRAM `0x2000_3D6A`, indexed by `device_address - 1`, supports up to 6 packs).
 
 **Field-by-field encoding is mixed**. Some fields are emitted with `(stored_value - 2730)` via `subw r1, r1, #0xAAA`; others are emitted directly. The seven `subw` sites and what they encode:
 

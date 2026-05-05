@@ -63,7 +63,7 @@ def parse_frames(stream, timestamps):
     """Walk byte stream parsing Modbus frames.
 
     GivEnergy's FC=4 response format is non-standard:
-        slave | FC | start_addr_hi | start_addr_lo | data | CRC
+        device | FC | start_addr_hi | start_addr_lo | data | CRC
     (no byte_count field; length implicit from request count * 2).
 
     To compute FC=4 response length we need the count from the matching
@@ -80,7 +80,7 @@ def parse_frames(stream, timestamps):
     drops = 0
 
     while i < n - 3:
-        slave = stream[i]
+        device = stream[i]
         fc = stream[i + 1]
 
         def try_decode(role, req_count=None):
@@ -133,7 +133,7 @@ def parse_frames(stream, timestamps):
             "off": i,
             "raw": frame,
             "role": role,
-            "slave": slave,
+            "device": device,
             "fc": fc,
             "len": L,
             "swap": used_swap,
@@ -149,14 +149,14 @@ def parse_frames(stream, timestamps):
 
 
 def pair_request_response(frames):
-    """Pair each request with its response (the next frame, same slave/FC)."""
+    """Pair each request with its response (the next frame, same device/FC)."""
     pairs = []
     for i, f in enumerate(frames):
         if f["role"] != "request":
             continue
         if i + 1 < len(frames):
             nxt = frames[i + 1]
-            if nxt["role"] == "response" and nxt["slave"] == f["slave"] and nxt["fc"] == f["fc"]:
+            if nxt["role"] == "response" and nxt["device"] == f["device"] and nxt["fc"] == f["fc"]:
                 pairs.append((f, nxt))
     return pairs
 
@@ -199,19 +199,19 @@ def report(frames, drops, pairs, out=sys.stdout):
             raw = req["raw"]
             start = (raw[2] << 8) | raw[3]
             count = (raw[4] << 8) | raw[5]
-            by_type[(req["slave"], req["fc"], start, count)].append(req["ts"])
+            by_type[(req["device"], req["fc"], start, count)].append(req["ts"])
 
     p("## Query types and cadences")
     p()
-    p("| Slave | FC | Start | Count | Reqs | Avg gap (ms) | Min | Max |")
+    p("| Device | FC | Start | Count | Reqs | Avg gap (ms) | Min | Max |")
     p("|---:|---:|---:|---:|---:|---:|---:|---:|")
     for key, tss in sorted(by_type.items(), key=lambda x: (-len(x[1]), x[0])):
-        slave, fc, start, count = key
+        device, fc, start, count = key
         if len(tss) >= 2:
             deltas = [(tss[i + 1] - tss[i]).total_seconds() * 1000 for i in range(len(tss) - 1)]
-            p(f"| 0x{slave:02x} | {fc} | 0x{start:04x} | {count} | {len(tss)} | {mean(deltas):.1f} | {min(deltas):.0f} | {max(deltas):.0f} |")
+            p(f"| 0x{device:02x} | {fc} | 0x{start:04x} | {count} | {len(tss)} | {mean(deltas):.1f} | {min(deltas):.0f} | {max(deltas):.0f} |")
         else:
-            p(f"| 0x{slave:02x} | {fc} | 0x{start:04x} | {count} | {len(tss)} | - | - | - |")
+            p(f"| 0x{device:02x} | {fc} | 0x{start:04x} | {count} | {len(tss)} | - | - | - |")
     p()
 
     # Latency
@@ -223,20 +223,20 @@ def report(frames, drops, pairs, out=sys.stdout):
         if req["fc"] in (3, 4):
             start = (req["raw"][2] << 8) | req["raw"][3]
             count = (req["raw"][4] << 8) | req["raw"][5]
-            key = (req["slave"], req["fc"], start, count)
+            key = (req["device"], req["fc"], start, count)
         else:
-            key = (req["slave"], req["fc"])
+            key = (req["device"], req["fc"])
         latencies[key].append(dt_ms)
 
     p("| Query | n | avg ms | p50 | min | max |")
     p("|---|---:|---:|---:|---:|---:|")
     for key, lats in sorted(latencies.items(), key=lambda x: -len(x[1]))[:30]:
         if len(key) == 4:
-            slave, fc, start, count = key
-            label = f"slave 0x{slave:02x} FC{fc} start=0x{start:04x} cnt={count}"
+            device, fc, start, count = key
+            label = f"device 0x{device:02x} FC{fc} start=0x{start:04x} cnt={count}"
         else:
-            slave, fc = key
-            label = f"slave 0x{slave:02x} FC{fc}"
+            device, fc = key
+            label = f"device 0x{device:02x} FC{fc}"
         if len(lats) >= 2:
             p(f"| {label} | {len(lats)} | {mean(lats):.1f} | {median(lats):.1f} | {min(lats):.1f} | {max(lats):.1f} |")
         else:
@@ -253,13 +253,13 @@ def report(frames, drops, pairs, out=sys.stdout):
             raw = f["raw"]
             addr = (raw[2] << 8) | raw[3]
             val = (raw[4] << 8) | raw[5]
-            p(f"- {f['ts'].strftime('%H:%M:%S.%f')[:-3]}  slave=0x{f['slave']:02x} addr=0x{addr:04x} value=0x{val:04x}")
+            p(f"- {f['ts'].strftime('%H:%M:%S.%f')[:-3]}  device=0x{f['device']:02x} addr=0x{addr:04x} value=0x{val:04x}")
         p()
     if excs:
         p(f"## Modbus exceptions: {len(excs)}")
         p()
         for f in excs[:20]:
-            p(f"- {f['ts'].strftime('%H:%M:%S.%f')[:-3]}  slave=0x{f['slave']:02x} fc=0x{f['fc']:02x} code={f['raw'][2]}")
+            p(f"- {f['ts'].strftime('%H:%M:%S.%f')[:-3]}  device=0x{f['device']:02x} fc=0x{f['fc']:02x} code={f['raw'][2]}")
 
 
 def main(argv):

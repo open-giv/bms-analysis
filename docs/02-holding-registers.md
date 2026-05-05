@@ -1,11 +1,11 @@
 # Holding registers (FC=3)
 
-The inverter polls a single block of 28 holding registers (offsets `0x0000`-`0x001B`) from **slave 1 only**, every ~245 ms. This is the highest-rate query on the bus and carries the BMS's real-time status.
+The inverter polls a single block of 28 holding registers (offsets `0x0000`-`0x001B`) from **device 1 only**, every ~245 ms. This is the highest-rate query on the bus and carries the BMS's real-time status.
 
 ## Poll request and response shape
 
 ```
-Request:   01 03 00 00 00 1C 44 03                     (8 bytes; slave=1, FC=3, start=0, count=28, CRC)
+Request:   01 03 00 00 00 1C 44 03                     (8 bytes; device=1, FC=3, start=0, count=28, CRC)
 Response:  01 03 38 [56 data bytes] [crc_lo crc_hi]    (61 bytes; standard Modbus with byte_count=0x38)
 ```
 
@@ -19,9 +19,9 @@ FC=3 uses standard Modbus framing (with byte_count, unlike FC=4). See [01-protoc
 | Minimum gap | 231 ms |
 | Maximum gap | 481 ms |
 | BMS turnaround latency (req -> rsp) | ~101 ms (p95: 103 ms; range 90-114 ms) |
-| Slave addressed | 1 only (the primary battery; HR is never polled to other slaves) |
+| Device addressed | 1 only (the primary battery; HR is never polled to other devices) |
 
-The slave-1 hard-coding is confirmed both empirically and from inverter firmware analysis: the FA-series Gen 3 builder writes `movs r0, #1; strb r0, [sp]` for the slave byte unconditionally on the HR path.
+The device-1 hard-coding is confirmed both empirically and from inverter firmware analysis: the FA-series Gen 3 builder writes `movs r0, #1; strb r0, [sp]` for the device byte unconditionally on the HR path.
 
 ## Register layout
 
@@ -29,7 +29,7 @@ The 28 registers (= 56 bytes) decoded at the byte level:
 
 | Reg | Bytes | Empirical observation | Firmware-derived interpretation |
 |----:|---|---|---|
-| 0   | 0-1   | constant `0x0065` (101) | Init writes literal `0x65`. **Fixed protocol/device marker constant** (not the slave address - that's set by dipswitches). |
+| 0   | 0-1   | constant `0x0065` (101) | Init writes literal `0x65`. **Fixed protocol/device marker constant** (not the device address - that's set by dipswitches). |
 | 1-4 | 2-9   | constant `0xFFFF` x 4 | Never written after the 0xFFFF init. **Truly unused / reserved.** |
 | 5-9 | 10-19 | ASCII serial number (e.g. `XXXXXXXXXX`) | 5 halfwords copied big-endian from a 10-byte SRAM struct. |
 | 10  | 20-21 | constant `0xFFFF` | Never written. **Unused.** |
