@@ -21,7 +21,7 @@ def load_wire_records(wire_path: Path) -> pd.DataFrame:
     for req, rsp in pairs:
         row = {
             "ts": pd.Timestamp(rsp["ts"]),
-            "slave": rsp["slave"],
+            "device": rsp["device"],
             "fc": rsp["fc"],
             "addr": (req["raw"][2] << 8) | req["raw"][3],
             "count": (req["raw"][4] << 8) | req["raw"][5] if rsp["fc"] in (3, 4) else None,

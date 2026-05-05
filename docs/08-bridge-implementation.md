@@ -4,16 +4,16 @@ Design rules and implementation guidance for a bridge that lets a GivEnergy LV b
 
 ```
 [GivEnergy battery] <-- RS485 / GivEnergy Modbus --> [Bridge] <-- standard protocol --> [3rd-party inverter]
-                          (bridge is master)                       (bridge is slave / talker)
+                          (bridge is controller)                       (bridge is device / talker)
 ```
 
 ## Bridge responsibilities
 
 The bridge is a **two-sided protocol translator**:
 
-1. **GivEnergy side (master)**: poll the BMS using the same protocol the GivEnergy inverter uses. HR poll on slave 1 every ~245 ms, IR rotation across slaves 1..N every ~10 s. Standard FC=3 framing, non-standard FC=4 framing. See [01-protocol.md](01-protocol.md), [02-holding-registers.md](02-holding-registers.md), [03-input-registers.md](03-input-registers.md).
+1. **GivEnergy side (controller)**: poll the BMS using the same protocol the GivEnergy inverter uses. HR poll on device 1 every ~245 ms, IR rotation across devices 1..N every ~10 s. Standard FC=3 framing, non-standard FC=4 framing. See [01-protocol.md](01-protocol.md), [02-holding-registers.md](02-holding-registers.md), [03-input-registers.md](03-input-registers.md).
 
-2. **Inverter side (slave / talker)**: present the parsed BMS state in the format the third-party inverter expects. Common targets are listed below.
+2. **Inverter side (device / talker)**: present the parsed BMS state in the format the third-party inverter expects. Common targets are listed below.
 
 3. **Translation layer**: map GivEnergy register fields to the target protocol's fields, applying any unit conversions, range clamping, and time-averaging. Many target protocols expect slower update rates than GivEnergy provides (e.g. 1 Hz instead of 4 Hz), so light filtering is desirable.
 
@@ -89,12 +89,12 @@ For development, an SBC running Python or Go is easiest. For production deployme
 
 The bridge plays inverter role on the RS485 bus. It must:
 
-- **Set itself as the bus master** (only one master at a time on RS485). If the real GivEnergy inverter is removed, the bridge takes its place. If it's still present, the bridge must NOT also be a master - it would conflict.
+- **Set itself as the bus controller** (only one controller at a time on RS485). If the real GivEnergy inverter is removed, the bridge takes its place. If it's still present, the bridge must NOT also be a controller - it would conflict.
 - **Drive RS485 DE/RE correctly** before TX (most USB-RS485 dongles handle this automatically; check before deploying).
-- **Send HR poll** to slave 1 every ~245 ms with the canonical request bytes `01 03 00 00 00 1C` + CRC.
-- **Send IR polls** rotating through slaves 1..N at ~10 s spacing per query, three blocks each.
+- **Send HR poll** to device 1 every ~245 ms with the canonical request bytes `01 03 00 00 00 1C` + CRC.
+- **Send IR polls** rotating through devices 1..N at ~10 s spacing per query, three blocks each.
 - **Parse FC=3 responses normally** (standard Modbus framing).
-- **Parse FC=4 responses with the non-standard format** (slave + FC + addr_echo + data + CRC, no byte_count). Length is implicit from the request's count.
+- **Parse FC=4 responses with the non-standard format** (device + FC + addr_echo + data + CRC, no byte_count). Length is implicit from the request's count.
 
 The polling pattern documented in [06-wire-captures.md](06-wire-captures.md) is what the GivEnergy battery firmware expects to see; replicating it gives the BMS no reason to behave differently than it would with a real inverter.
 
@@ -103,11 +103,11 @@ The polling pattern documented in [06-wire-captures.md](06-wire-captures.md) is 
 | Side | Inherent rate |
 |---|---|
 | GivEnergy HR poll (current source data) | 4 Hz (245 ms cadence) |
-| GivEnergy IR Block 1/2/3 (slower telemetry) | 0.1 Hz per block per slave |
+| GivEnergy IR Block 1/2/3 (slower telemetry) | 0.1 Hz per block per device |
 | Pylontech CAN broadcasts | 1 Hz typically |
 | Other CAN protocols | 1 Hz typically |
 
-The bridge has plenty of headroom. The real engineering challenge is on data freshness: cell voltages from GivEnergy update only when Block 3 is polled (about once every 10 s per slave). For most inverter use cases that is fine. If a third-party inverter expects sub-second cell voltage updates (rare), the bridge should poll Block 3 more aggressively.
+The bridge has plenty of headroom. The real engineering challenge is on data freshness: cell voltages from GivEnergy update only when Block 3 is polled (about once every 10 s per device). For most inverter use cases that is fine. If a third-party inverter expects sub-second cell voltage updates (rare), the bridge should poll Block 3 more aggressively.
 
 ## Validation envelopes from the third-party side
 
@@ -164,7 +164,7 @@ Mapping GivEnergy register fields to fields the bridge must produce:
 
 ## Multi-battery handling
 
-GivEnergy supports up to 5 paralleled batteries (slaves 1..5). The bridge has two strategies:
+GivEnergy supports up to 5 paralleled batteries (devices 1..5). The bridge has two strategies:
 
 - **Aggregate** all batteries into one virtual "stack" presented to the inverter. Sum currents and capacities; report worst-case cell voltages and temperatures; use the lowest SoC. This is the most compatible approach (third-party inverters expect a single battery interface).
 - **Pass-through per-battery** if the target protocol supports multi-battery (e.g. some Pylontech CAN modes do). More accurate but rarely needed.
@@ -186,7 +186,7 @@ Same general approach as the emulator (see [07-emulator-implications.md](07-emul
 
 2. **Endian confusion**. GivEnergy Modbus is big-endian (network byte order); CAN protocols are typically little-endian. Easy to get backwards.
 
-3. **Forgetting the FC=4 non-standard framing on the GivEnergy side**. If the bridge uses a stock Modbus master library, FC=4 reads will fail with CRC errors. See [01-protocol.md](01-protocol.md) for the framing details. The library may need to be patched.
+3. **Forgetting the FC=4 non-standard framing on the GivEnergy side**. If the bridge uses a stock Modbus library, FC=4 reads will fail with CRC errors. See [01-protocol.md](01-protocol.md) for the framing details. The library may need to be patched.
 
 4. **Stale data on the inverter side**. If the GivEnergy poll stalls (e.g. battery briefly disconnected during commissioning), the bridge must keep broadcasting CAN frames with the last known values - some inverters mark the battery offline if frames stop arriving for a few seconds.
 

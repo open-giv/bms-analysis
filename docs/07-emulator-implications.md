@@ -1,6 +1,6 @@
 # Emulator implications
 
-Design rules and pitfalls for implementing a Modbus slave that emulates a GivEnergy LV BMS. Such an emulator could be used to:
+Design rules and pitfalls for implementing a Modbus device that emulates a GivEnergy LV BMS. Such an emulator could be used to:
 
 - Make a third-party LiFePO4 battery work with a GivEnergy inverter
 - Bench-test inverter behaviour without a real battery
@@ -34,8 +34,8 @@ Other FCs should return Modbus exception 0x80|FC with code 1 ("Illegal Function"
 This is the main thing a stock Modbus library will get wrong:
 
 ```
-Standard Modbus FC=4:           slave | FC | byte_count(1) | data | CRC
-GivEnergy BMS FC=4:             slave | FC | addr_echo_hi | addr_echo_lo | data | CRC
+Standard Modbus FC=4:           device | FC | byte_count(1) | data | CRC
+GivEnergy BMS FC=4:             device | FC | addr_echo_hi | addr_echo_lo | data | CRC
 ```
 
 The emulator must echo the request's start address (2 bytes, big-endian) in place of the byte_count. Data length is implicit from the request's count x 2.
@@ -50,17 +50,17 @@ Respond within ~100 ms of receiving a complete request. Real BMS turnaround is 9
 
 If the emulator misses too many responses, the inverter raises a "BMS comms failure" status bit (~20 missed polls in a row). It will keep retrying though - a brief glitch is recoverable.
 
-### 5. Slave address
+### 5. Device address
 
-The emulator answers to the slave address it's been configured as. The inverter:
+The emulator answers to the device address it's been configured as. The inverter:
 
-- HR-polls **slave 1 only** (always - no rotation)
-- IR-polls **slaves 1, 2, 3, 4, 5** in rotation (regardless of population)
+- HR-polls **device 1 only** (always - no rotation)
+- IR-polls **devices 1, 2, 3, 4, 5** in rotation (regardless of population)
 
-If you only emulate one battery at slave 1, the inverter will still try slaves 2-5. Two options:
+If you only emulate one battery at device 1, the inverter will still try devices 2-5. Two options:
 
-- **Multi-battery emulation**: respond as multiple slaves (1 + 2 + ... up to 5).
-- **Single-battery emulation**: respond only as slave 1; let queries to other slaves time out, or return the documented "absent slave" pattern (see [03-input-registers.md](03-input-registers.md)). The inverter handles missing slaves gracefully.
+- **Multi-battery emulation**: respond as multiple devices (1 + 2 + ... up to 5).
+- **Single-battery emulation**: respond only as device 1; let queries to other devices time out, or return the documented "absent device" pattern (see [03-input-registers.md](03-input-registers.md)). The inverter handles missing devices gracefully.
 
 ### 6. Value envelopes
 
@@ -80,10 +80,10 @@ Driven by the inverter:
 
 | Query | Cadence | Response size |
 |---|---|---:|
-| HR poll (slave 1 only) | every ~245 ms (range 231-481 ms) | 61 bytes |
-| IR Block 1 (per slave) | once per ~12 s rotation cycle | 48 bytes |
-| IR Block 2 (per slave) | once per ~12 s rotation cycle | 44 bytes |
-| IR Block 3 (per slave) | once per ~12 s rotation cycle | 46 bytes |
+| HR poll (device 1 only) | every ~245 ms (range 231-481 ms) | 61 bytes |
+| IR Block 1 (per device) | once per ~12 s rotation cycle | 48 bytes |
+| IR Block 2 (per device) | once per ~12 s rotation cycle | 44 bytes |
+| IR Block 3 (per device) | once per ~12 s rotation cycle | 46 bytes |
 | FC=06 mode-change writes | event-driven (charge enable, BMS reset, force-charge); not steady-state | 8 bytes echo |
 
 The inverter waits for response completion before issuing the next query, so there's no bus contention for the emulator to handle.
@@ -176,7 +176,7 @@ Before having access to a real GivEnergy inverter, the emulator can be validated
 
 2. **Replay harness over a virtual serial pair** - use `socat` to create a virtual TTY pair, run the emulator on one end and a "fake inverter" replay tool on the other.
 
-3. **Side-by-side bus test** - run the emulator alongside a real battery on the same RS485 bus at a different slave address, compare its responses to the real one.
+3. **Side-by-side bus test** - run the emulator alongside a real battery on the same RS485 bus at a different device address, compare its responses to the real one.
 
 When the dongle / real inverter is available, end-to-end testing is straightforward: power-cycle the inverter with the emulator on the bus, verify the inverter's UI shows the emulated battery and reports plausible values.
 

@@ -1,6 +1,6 @@
 """Field-level decoder for GivEnergy BMS Modbus response frames.
 
-Takes the data portion of a parsed frame (no slave/fc/CRC/length headers) and
+Takes the data portion of a parsed frame (no device/fc/CRC/length headers) and
 returns a flat dict of named fields.
 
 Field mappings follow:

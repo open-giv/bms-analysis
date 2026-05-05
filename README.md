@@ -24,7 +24,7 @@ The original empirical analysis - hardware setup, RS485 captures, raw hex traces
 | [docs/00-glossary.md](docs/00-glossary.md) | Glossary of terms (Modbus, FCs, embedded, battery, etc.) - **start here if jargon trips you up** |
 | [docs/01-protocol.md](docs/01-protocol.md) | Modbus framing, baud rate, CRC, function-code support, FC=4 non-standard format |
 | [docs/02-holding-registers.md](docs/02-holding-registers.md) | HR(0..27) layout, field-by-field interpretation, polling cadence |
-| [docs/03-input-registers.md](docs/03-input-registers.md) | IR Block 1/2/3, layouts, cell voltages, slave rotation, "absent slave" pattern |
+| [docs/03-input-registers.md](docs/03-input-registers.md) | IR Block 1/2/3, layouts, cell voltages, device rotation, "absent device" pattern |
 | [docs/04-bms-firmware.md](docs/04-bms-firmware.md) | BMS firmware static analysis - MCU, register table, FC handlers, internal architecture |
 | [docs/05-inverter-firmware.md](docs/05-inverter-firmware.md) | Inverter firmware analysis - variants, validation rules, "BMS protocol is the constant" insight |
 | [docs/06-wire-captures.md](docs/06-wire-captures.md) | Cadence, latency, IR rotation pattern, capture methodology |

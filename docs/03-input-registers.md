@@ -1,6 +1,6 @@
 # Input registers (FC=4)
 
-The inverter polls input registers from each battery (slaves 1..5) using FC=4 reads. Telemetry data including cell voltages, temperatures, capacities, and SoC is split across **three blocks**:
+The inverter polls input registers from each battery (devices 1..5) using FC=4 reads. Telemetry data including cell voltages, temperatures, capacities, and SoC is split across **three blocks**:
 
 | Block | Start address | Count | Approximate purpose |
 |---|---|---:|---|
@@ -12,22 +12,22 @@ The blocks are not contiguous: there's a gap at register `0x003C` and beyond (no
 
 ## Wire format
 
-**FC=4 responses are non-standard** - they echo the request's start address in place of the standard byte_count field. See [01-protocol.md](01-protocol.md) for the full framing details. The data layouts below describe the bytes **after** the 4-byte response header (`slave + FC + addr_echo_hi + addr_echo_lo`).
+**FC=4 responses are non-standard** - they echo the request's start address in place of the standard byte_count field. See [01-protocol.md](01-protocol.md) for the full framing details. The data layouts below describe the bytes **after** the 4-byte response header (`device + FC + addr_echo_hi + addr_echo_lo`).
 
 ## Cadence
 
 | Metric | Value |
 |---|---|
 | IR poll interval (per query) | ~10-12 seconds between repetitions of the same query |
-| Full slave x block sweep | ~3 minutes for 5 slaves x 3 blocks |
+| Full device x block sweep | ~3 minutes for 5 devices x 3 blocks |
 | BMS turnaround latency | 84-89 ms (faster than HR because responses are smaller) |
-| Slaves polled | 1, 2, 3, 4, 5 (all five regardless of which are populated) |
+| Devices polled | 1, 2, 3, 4, 5 (all five regardless of which are populated) |
 
 The inverter alternates IR polls into the gaps between HR polls. HR is the high-priority loop; IR is opportunistic telemetry collection.
 
-## Slave rotation
+## Device rotation
 
-The inverter polls all five potential slave addresses (1..5) regardless of how many batteries are actually present. Empty slave slots return a distinctive "absent slave" pattern (see end of this document).
+The inverter polls all five potential device addresses (1..5) regardless of how many batteries are actually present. Empty device slots return a distinctive "absent device" pattern (see end of this document).
 
 ## Block 1 (regs 0x0000 - 0x0014, 21 regs)
 
@@ -46,9 +46,9 @@ The inverter polls all five potential slave addresses (1..5) regardless of how m
 | 34 | 2 | (unknown, observed `0x0008`) | Possibly USB / accessory presence flag |
 | 36 | 6 | (unknown, all zero) | Reserved / unused |
 
-> **Temperature encoding**: the BMS firmware applies `subw r1, r1, #0xAAA` (i.e. subtract 2730) to each of the 5 temperature halfwords just before writing them to the TX buffer (flash addresses 0x0800_DF8C, 0x0800_DF98, 0x0800_DFA4, 0x0800_DFB0, 0x0800_DFBC). Internally the values are stored as `(decidegC + 2730)` - a positive-offset representation. The subw removes the bias before TX, so the **wire bytes are raw decidegC**, signed (negative temperatures will appear as 2's-complement int16). No decoder transform needed. The "absent slave" `0xF556` sentinel is a natural side effect of the same encoding (see absent-slave section).
+> **Temperature encoding**: the BMS firmware applies `subw r1, r1, #0xAAA` (i.e. subtract 2730) to each of the 5 temperature halfwords just before writing them to the TX buffer (flash addresses 0x0800_DF8C, 0x0800_DF98, 0x0800_DFA4, 0x0800_DFB0, 0x0800_DFBC). Internally the values are stored as `(decidegC + 2730)` - a positive-offset representation. The subw removes the bias before TX, so the **wire bytes are raw decidegC**, signed (negative temperatures will appear as 2's-complement int16). No decoder transform needed. The "absent device" `0xF556` sentinel is a natural side effect of the same encoding (see absent-device section).
 
-Example response data (slave 1 in cold_start.log, capture time 07:23:51):
+Example response data (device 1 in cold_start.log, capture time 07:23:51):
 
 ```
 58 58 58 58 58 58 58 58 58 58 20 20 20 20 20 20 20 20 20 20    ; "XXXXXXXXXX" + 10 spaces
@@ -86,7 +86,7 @@ ASCII view: `XXXXXXXXXX          ......................`
 
 > **Note**: capacity unit: Ken's [NOTES.md](../NOTES.md) initially documented these as mAh, then corrected to deci-Ah. So `0x48A8` = 18600 in raw units = **186.00 Ah** when interpreted as 0.1 Ah.
 
-Example (slave 1 in cold_start.log):
+Example (device 1 in cold_start.log):
 
 ```
 10 02 e1 00 00 cd 33 cf 85 ff ff ff 35 00 00 4b c0 00 00 48
@@ -115,7 +115,7 @@ a8 00 00 46 7b 5d 00 00 0e 10 00 00 00 00 00 0b ce 00
 >
 > See [04-bms-firmware.md](04-bms-firmware.md) for the firmware code paths and the full set of `-2730`-encoded fields.
 
-Example (slave 1 in cold_start.log):
+Example (device 1 in cold_start.log):
 
 ```
 0c f4 0c f5 0c f5 0c f7 0c f7 0c f7 0c f7 0c f8 0c f8 0c f8    ; cells 1-10
@@ -126,11 +126,11 @@ Example (slave 1 in cold_start.log):
 
 This pack is ~3.31 V/cell - matching giv_tcp's reported "Battery_Cell_X_Voltage": 3.31 type values.
 
-## "Absent slave" pattern
+## "Absent device" pattern
 
-Slaves 3, 4, 5 in Ken's setup don't have real batteries (he has 2). The inverter still polls them and **the slot returns a distinctive empty-but-valid response** for each block:
+Devices 3, 4, 5 in Ken's setup don't have real batteries (he has 2). The inverter still polls them and **the slot returns a distinctive empty-but-valid response** for each block:
 
-### Block 1 absent-slave response (42 bytes data):
+### Block 1 absent-device response (42 bytes data):
 
 ```
 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ; serial = all zeros
@@ -144,9 +144,9 @@ The `f5 56 f5 56 f5 56 f5 56 f5 56` pattern in the temperature region is distinc
 
 This is **not an explicit "no sensor" special value** - it's a natural consequence of the temperature-encoding `subw`. The firmware stores temperatures internally as `(decidegC + 2730)`. For an absent battery slot, the internal value is `0`, so the `subw r1, r1, #0xAAA` at TX produces `0 - 2730 = -2730 = 0xF556` (uint16). An emulator that supports multi-battery mode just emits `0xF556` for empty temp slots without any special-case logic. Same explanation for the `0xF556` at Block 3 max/min slots (those positions are also driven by `subw`'d code paths in the firmware's RAM init / formatting).
 
-### Block 2 absent-slave response: all zeros (38 bytes)
+### Block 2 absent-device response: all zeros (38 bytes)
 
-### Block 3 absent-slave response (40 bytes data):
+### Block 3 absent-device response (40 bytes data):
 
 ```
 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ; cells = 0
@@ -155,7 +155,7 @@ f5 56 f5 56                                                    ; max/min = 0xF55
 00 00 00 00                                                    ; reserved
 ```
 
-Important for emulators that want to support multi-battery configurations: if you only emulate one battery at slave 1, the inverter will still poll slaves 2-5. Either respond with the absent-slave pattern (cleanest), or don't respond at all (the bus times out, then HR resumes).
+Important for emulators that want to support multi-battery configurations: if you only emulate one battery at device 1, the inverter will still poll devices 2-5. Either respond with the absent-device pattern (cleanest), or don't respond at all (the bus times out, then HR resumes).
 
 ## Cross-reference
 

@@ -39,11 +39,11 @@ All ARM firmwares analysed contain:
 
 While the wire format is constant, internal code varies substantially. Some examples:
 
-- **FA-series uses a 3-MCU split**: a main ARM (STM32F105, 256 KB) does the BMS Modbus master + scheduler + cloud reporting; a small ARM2 (STM32F103, 17 KB) handles sensor I/O over an inter-MCU link; the DSP handles power-electronics control. The BMS link is on USART2.
+- **FA-series uses a 3-MCU split**: a main ARM (STM32F105, 256 KB) does the BMS Modbus controller + scheduler + cloud reporting; a small ARM2 (STM32F103, 17 KB) handles sensor I/O over an inter-MCU link; the DSP handles power-electronics control. The BMS link is on USART2.
 
-- **A316 uses a 2-MCU split** (ARM + DSP), with the BMS master in the ARM `ARMStore.bin`. The firmware's load address is `0x08014000` (not `0x08000000`) - confirmed via the reset vector and PC-relative references to the CRC tables.
+- **A316 uses a 2-MCU split** (ARM + DSP), with the BMS controller in the ARM `ARMStore.bin`. The firmware's load address is `0x08014000` (not `0x08000000`) - confirmed via the reset vector and PC-relative references to the CRC tables.
 
-- **Some variants additionally talk to non-BMS devices on the same RS485 bus** - e.g. A316 has a parallel master that polls slave `0x11` (an energy meter / EMS / control unit) with FC=3 / FC=6, plus a 17-entry table walk over slaves 1, 5, 6, 7, 8 (purpose unclear; possibly parallel-inverter or HV stack expansion). Neither of these talks to the LV battery the way the wire captures show.
+- **Some variants additionally talk to non-BMS devices on the same RS485 bus** - e.g. A316 has a parallel controller that polls device `0x11` (an energy meter / EMS / control unit) with FC=3 / FC=6, plus a 17-entry table walk over devices 1, 5, 6, 7, 8 (purpose unclear; possibly parallel-inverter or HV stack expansion). Neither of these talks to the LV battery the way the wire captures show.
 
 The key observation: the LV-battery polling code in each variant produces the same on-the-wire bytes, even though the implementation paths differ.
 
@@ -73,7 +73,7 @@ The values seen by Ken on the wire (e.g. the constant `0x2328` = 9000 = 90.00 A 
 | CRC-16 byte-stride function | `0x0800_C950` |
 | auchCRCHi / auchCRCLo tables | `0x0803_E2F4` / `0x0803_E3F4` |
 | Modbus request builder (unified) | `0x0801_15B2` - `0x0801_19B0` |
-| HR poll path (slave=1, FC=3, count=0x1C) | `0x0801_1938` |
+| HR poll path (device=1, FC=3, count=0x1C) | `0x0801_1938` |
 | IR rotation state machine | `0x0801_1812` - `0x0801_18A8` |
 | BMS RS485 = USART2 | `0x4000_4400` |
 
@@ -85,11 +85,11 @@ FA-series has FC=06 builders for mode-change events (charge enable, BMS reset, f
 
 Load address `0x08014000`. The CRC function is at `0x0801_7FCC`.
 
-A316 contains **three** Modbus master code paths on USART2:
+A316 contains **three** Modbus controller code paths on USART2:
 
-1. **Slave-`0x11` master** (FC=3 of 38 regs at addr `0x00CA`, FC=6 at addr `0x00E7`) - energy meter / EMS path, not the BMS.
-2. **5-slave non-sequential rotation** (slaves 1, 5, 6, 7, 8) doing FC=4 with count=2 over a 17-entry register-address table - purpose unclear, possibly HV expansion or parallel-inverter sense.
-3. **LV-battery polling state machine at flash `0x08026C40`** (sole caller `0x08027440`). 4-state, 5-slave 1..5 sequential rotation, FC=4 only, addr/count = 0x0000/21, 0x0015/19, 0x0028/20. Gated by 500-tick cadence counter at SRAM `0x200000DE`. Stages request frame at SRAM `0x2000070A + 0x84..+0x89`. RX parser at `0x08026EBC` reads response data from struct offset +6 (consistent with the BMS's non-standard FC=4 framing). Per-slave decoded state at SRAM `0x200007A4 + (slave_idx * 131)`.
+1. **Device-`0x11` controller** (FC=3 of 38 regs at addr `0x00CA`, FC=6 at addr `0x00E7`) - energy meter / EMS path, not the BMS.
+2. **5-device non-sequential rotation** (devices 1, 5, 6, 7, 8) doing FC=4 with count=2 over a 17-entry register-address table - purpose unclear, possibly HV expansion or parallel-inverter sense.
+3. **LV-battery polling state machine at flash `0x08026C40`** (sole caller `0x08027440`). 4-state, 5-device 1..5 sequential rotation, FC=4 only, addr/count = 0x0000/21, 0x0015/19, 0x0028/20. Gated by 500-tick cadence counter at SRAM `0x200000DE`. Stages request frame at SRAM `0x2000070A + 0x84..+0x89`. RX parser at `0x08026EBC` reads response data from struct offset +6 (consistent with the BMS's non-standard FC=4 framing). Per-device decoded state at SRAM `0x200007A4 + (device_idx * 131)`.
 
 **Path 3 is the LV battery path.** It produces the IR Block 1/2/3 polls Ken sees on his AC 3.0 wire captures.
 
@@ -106,7 +106,7 @@ Confirmed across all surveyed firmwares and Ken's wire captures:
 - **No FC=06 writes during normal polling** - read-only steady-state operation
 - **No FC=10** (write multiple) builders found in any inverter firmware
 - **No FC=23** (read/write multiple) builders found
-- **No startup probe / handshake** - the inverter just begins polling slave 1 with the standard HR query immediately after boot
+- **No startup probe / handshake** - the inverter just begins polling device 1 with the standard HR query immediately after boot
 
 ## Implications for an emulator
 

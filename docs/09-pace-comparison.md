@@ -92,7 +92,7 @@ If you only need to satisfy a GivEnergy inverter, you only need the Modbus seria
 Pylontech CAN broadcasts the same fields the table above lists, just packaged as 8-byte CAN frames at fixed message IDs. The bridge logic becomes:
 
 ```
-poll GivEnergy battery (Modbus master)
+poll GivEnergy battery (Modbus controller)
   -> parse HR + IR responses into pack_state
   -> [optionally apply unit conversions]
   -> serialize as Pylontech CAN frames at 1 Hz
