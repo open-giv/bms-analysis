@@ -33,7 +33,7 @@ The 28 registers (= 56 bytes) decoded at the byte level:
 | 1-4 | 2-9   | constant `0xFFFF` x 4 | Never written after the 0xFFFF init. **Truly unused / reserved.** |
 | 5-9 | 10-19 | ASCII serial number (e.g. `XXXXXXXXXX`) | 5 halfwords copied big-endian from a 10-byte SRAM struct. |
 | 10  | 20-21 | constant `0xFFFF` | Never written. **Unused.** |
-| 11  | 22-23 | varies (`0x00BA -> 0x0174` once in capture) | **`(SoC_float * 100)`** - SoC encoded as 0.01 % units. `0x00BA` = 1.86 %, `0x0174` = 3.72 %. Computed via `0x801c2ac` (float-mul) + `0x801c468` (float-to-uint). Note the small magnitude - this may be a different "SoC-like" metric (e.g. balancing-cell SoC, not main pack SoC). |
+| 11  | 22-23 | (`0x00BA` and `0x0174`) Total Ah of batteries online.  Two values seen are multiples of documented battery Ah capacity.  186 seen when one battery at min charge during calibration cycle, else 372. | **`(SoC_float * 100)`** - SoC encoded as 0.01 % units. `0x00BA` = 1.86 %, `0x0174` = 3.72 %. Computed via `0x801c2ac` (float-mul) + `0x801c468` (float-to-uint). Note the small magnitude - this may be a different "SoC-like" metric (e.g. balancing-cell SoC, not main pack SoC). |
 | 12  | 24-25 | constant `0x0030` (48) | Init writes literal `0x30`. Possibly a **hardware revision** field. |
 | 13  | 26-27 | constant `0x0BCE` (3022) | Confirmed: `movw r0, #0xbce; strh r0, [r4, #0x1a]`. **BMS firmware version.** |
 | 14  | 28-29 | constant `0x0000` in capture | Set to 0 or 1 from a flag byte. **Boolean status** (not yet observed transitioning - needs labelled captures). |
@@ -43,7 +43,7 @@ The 28 registers (= 56 bytes) decoded at the byte level:
 | 18  | 36-37 | constant `0x389D` (14493) across all 829 captures | Hash high-half of the same 6-byte source. Constant per-device for this device, but technically derived from the same dynamic bytes - the high-half computation just happens to be invariant for this device's state range. |
 | 19  | 38-39 | See [Register 19 Bits](#register-19-bits) | OR-mask of 8 specific bits: bit0/1 from sign of `*(int*)0x2000014C`; bit2 from `[0x20000140]`; bit3 from `[0x200000CE]`; bit4 from `[0x2000009D]`; bit5 conditional; bit6/7 from `[0x2000027B]` bits 5/6. **Composite status byte.** |
 | 20  | 40-41 | See [Register 20 Bits](#register-20-bits) | a set of per-pack online flags (8-bit OR composite from `[0x20000279]` and per-pack walk) |
-| 21  | 42-43 | 3 distinct values `0x005D`-`0x005F` | `*(u16)0x20000184`. Possibly main pack SoC % (93-95%) - decreased over capture, plausible. |
+| 21  | 42-43 | Battery state of charge 0-100 (%) | `*(u16)0x20000184`. Possibly main pack SoC % (93-95%) - decreased over capture, plausible. |
 | 22  | 44-45 | Battery Voltage in units of 0.01V, measured at primary battery pack. |
 | 23  | 46-47 | 85 distinct values across signed range | **Signed pack current in deciAmps (0.1 A units)**, NOT centi-amps. From `*(float*)0x2000014C * 10.0f` via float-to-signed-int. Positive values indicate charging, negative discharging. |
 | 24  | 48-49 | nearly constant `0x0011` (17) | `(min_cell_mV - 2730) / 10` - encodes min cell voltage with `-2730` baseline, then divides by 10. So `0x0011` = 17 -> `17 * 10 + 2730 = 2900 mV` min cell. (For a 3.31 V/cell pack, this is unexpectedly low - might track the *floor* rather than current min, or a different sensor.) |
