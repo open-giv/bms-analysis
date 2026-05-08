@@ -7,14 +7,16 @@ in place of byte_count). Tracks pending requests to determine FC=4 response
 length from the matching request's count.
 
 Usage:
-        python3 extract_fields.py <log_path> [output.csv] [[w@|b@]device:fc:reg ...]
+    python3 extract_fields.py [-g seconds] <log_path> [output.csv] [[w@|sw@|b@]device:fc:reg ...]
 
     device, fc, reg are integers (decimal or 0x-prefixed hex).
         Prefix each spec with:
-            - w@ for 16-bit word output (default if omitted)
-            - b@ for 16 separate bit columns per register
+            - w@  for 16-bit unsigned word output (default if omitted)
+            - sw@ for 16-bit signed integer output
+            - b@  for 16 separate bit columns per register
     If one or more register specs are given, only those registers appear in
     the output. Omit them to include every observed register.
+    Use -g to require a minimum time gap (seconds) between output rows.
 
 Output format:
     - One CSV row per Modbus request/response pair.
@@ -239,6 +241,7 @@ def parse_register_filter(specs):
     Each spec is one of:
       - device:fc:reg
       - w@device:fc:reg
+      - sw@device:fc:reg
       - b@device:fc:reg
 
     Each pattern component may be:
@@ -246,7 +249,7 @@ def parse_register_filter(specs):
       - '*' to match any value.
 
     Returns a list of (mode, pattern) tuples where:
-      - mode is 'w' or 'b'
+      - mode is 'w', 'sw', or 'b'
       - pattern is a (device, fc, reg) tuple where None represents a wildcard.
 
     Raises ValueError with a descriptive message on bad input.
@@ -258,9 +261,9 @@ def parse_register_filter(specs):
 
         if "@" in spec:
             prefix, body = spec.split("@", 1)
-            if prefix not in ("w", "b"):
+            if prefix not in ("w", "sw", "b"):
                 raise ValueError(
-                    f"Unknown format prefix {prefix!r} in {spec!r}; use 'w@' or 'b@'"
+                    f"Unknown format prefix {prefix!r} in {spec!r}; use 'w@', 'sw@', or 'b@'"
                 )
             mode = prefix
 
@@ -307,6 +310,7 @@ def _column_specs(all_keys, register_filter):
         return [("w", key) for key in sorted_keys]
 
     word_keys = set()
+    signed_word_keys = set()
     bit_keys = set()
 
     for key in sorted_keys:
@@ -315,6 +319,8 @@ def _column_specs(all_keys, register_filter):
                 continue
             if mode == "b":
                 bit_keys.add(key)
+            elif mode == "sw":
+                signed_word_keys.add(key)
             else:
                 word_keys.add(key)
 
@@ -322,6 +328,8 @@ def _column_specs(all_keys, register_filter):
     for key in sorted_keys:
         if key in word_keys:
             specs.append(("w", key))
+        if key in signed_word_keys:
+            specs.append(("sw", key))
         if key in bit_keys:
             for bit_index in range(0, 16):
                 specs.append(("b", key, bit_index))
@@ -329,10 +337,12 @@ def _column_specs(all_keys, register_filter):
     return specs
 
 
-def write_register_state_csv(pairs, out, register_filter=None):
+def write_register_state_csv(pairs, out, register_filter=None, min_gap_seconds=0.0):
     """Write one row per pair with last-known register values.
 
     register_filter, if given, is a list of (mode, pattern) tuples.
+    min_gap_seconds, if > 0, suppresses rows whose timestamps are too close
+    to the previous emitted row.
     """
     pair_updates = []
     all_keys = set()
@@ -345,7 +355,7 @@ def write_register_state_csv(pairs, out, register_filter=None):
     col_specs = _column_specs(all_keys, register_filter)
     header = ["timestamp"]
     for spec in col_specs:
-        if spec[0] == "w":
+        if spec[0] in ("w", "sw"):
             header.append(column_name(spec[1]))
         else:
             header.append(f"{column_name(spec[1])}_bit_{spec[2] + 1:02d}")
@@ -355,6 +365,7 @@ def write_register_state_csv(pairs, out, register_filter=None):
 
     last_known = {}
     last_data_row = None
+    last_output_ts = None
     for ts, updates in pair_updates:
         if updates:
             last_known.update(updates)
@@ -365,6 +376,13 @@ def write_register_state_csv(pairs, out, register_filter=None):
             if spec[0] == "w":
                 key = spec[1]
                 data_row.append(last_known.get(key, ""))
+            elif spec[0] == "sw":
+                key = spec[1]
+                value = last_known.get(key)
+                if value is None or value == "":
+                    data_row.append("")
+                else:
+                    data_row.append(value if value < 0x8000 else value - 0x10000)
             else:
                 key = spec[1]
                 bit_index = spec[2]
@@ -378,25 +396,60 @@ def write_register_state_csv(pairs, out, register_filter=None):
 
         if data_row == last_data_row:
             continue
+
+        if min_gap_seconds > 0 and last_output_ts is not None:
+            dt = (ts - last_output_ts).total_seconds()
+            if dt < min_gap_seconds:
+                continue
+
         last_data_row = data_row
+        last_output_ts = ts
 
         row = [ts.strftime("%Y-%m-%d %H:%M:%S.%f")] + data_row
         writer.writerow(row)
 
 
 def main(argv):
-    if len(argv) < 2:
+    args = argv[1:]
+    min_gap_seconds = 0.0
+    positional = []
+
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in ("-g"):
+            if i + 1 >= len(args):
+                print("Error: -g requires a numeric value in seconds", file=sys.stderr)
+                return 2
+            try:
+                min_gap_seconds = float(args[i + 1])
+            except ValueError:
+                print(f"Error: invalid gap value {args[i + 1]!r}; must be numeric seconds", file=sys.stderr)
+                return 2
+            i += 2
+            continue
+        if arg.startswith("-"):
+            print(f"Error: unknown option {arg!r}", file=sys.stderr)
+            return 2
+        positional.append(arg)
+        i += 1
+
+    if min_gap_seconds < 0:
+        print("Error: -g must be >= 0", file=sys.stderr)
+        return 2
+
+    if len(positional) < 1:
         print(
-            f"Usage: {argv[0]} <log_path> [output.csv] [[w@|b@]device:fc:reg ...]",
+            f"Usage: {argv[0]} [-g seconds] <log_path> [output.csv] [[w@|sw@|b@]device:fc:reg ...]",
             file=sys.stderr,
         )
         return 2
 
-    path = argv[1]
+    path = positional[0]
 
     # argv[2] is the optional output file if it doesn't look like a register spec.
     # Register specs always contain ':', so use that to distinguish.
-    rest = argv[2:]
+    rest = positional[1:]
     if rest and ":" not in rest[0]:
         out_path = rest[0]
         filter_specs = rest[1:]
@@ -418,10 +471,10 @@ def main(argv):
 
     if out_path is not None:
         with open(out_path, 'w', newline='') as f:
-            write_register_state_csv(pairs, f, register_filter)
+            write_register_state_csv(pairs, f, register_filter, min_gap_seconds=min_gap_seconds)
         print(f"CSV written to {out_path} ({len(pairs)} pairs, {len(frames)} frames, {drops} dropped bytes)", file=sys.stderr)
     else:
-        write_register_state_csv(pairs, sys.stdout, register_filter)
+        write_register_state_csv(pairs, sys.stdout, register_filter, min_gap_seconds=min_gap_seconds)
 
     return 0
 
