@@ -45,8 +45,8 @@ The 28 registers (= 56 bytes) decoded at the byte level:
 | 20  | 40-41 | See [Register 20 Bits](#register-20-bits) | a set of per-pack online flags (8-bit OR composite from `[0x20000279]` and per-pack walk) |
 | 21  | 42-43 | Battery state of charge 0-100 (%) | `*(u16)0x20000184`. Possibly main pack SoC % (93-95%) - decreased over capture, plausible. |
 | 22  | 44-45 | Battery Voltage in units of 0.01V, measured at primary battery pack. |
-| 23  | 46-47 | 85 distinct values across signed range | **Signed pack current in deciAmps (0.1 A units)**, NOT centi-amps. From `*(float*)0x2000014C * 10.0f` via float-to-signed-int. Positive values indicate charging, negative discharging. |
-| 24  | 48-49 | nearly constant `0x0011` (17) | `(min_cell_mV - 2730) / 10` - encodes min cell voltage with `-2730` baseline, then divides by 10. So `0x0011` = 17 -> `17 * 10 + 2730 = 2900 mV` min cell. (For a 3.31 V/cell pack, this is unexpectedly low - might track the *floor* rather than current min, or a different sensor.) |
+| 23  | 46-47 | Current (0.01 A units) of the primary battery.  Positive indicates charging, negative discharging. | **Signed pack current in deciAmps (0.1 A units)**, NOT centi-amps. From `*(float*)0x2000014C * 10.0f` via float-to-signed-int. Positive values indicate charging, negative discharging. |
+| 24  | 48-49 | Battery temperature in degrees C | `(min_cell_mV - 2730) / 10` - encodes min cell voltage with `-2730` baseline, then divides by 10. So `0x0011` = 17 -> `17 * 10 + 2730 = 2900 mV` min cell. (For a 3.31 V/cell pack, this is unexpectedly low - might track the *floor* rather than current min, or a different sensor.) |
 | 25  | 50-51 | constant `0x2328` (9000) in capture | **DYNAMIC**: `*(u16)0x20001598 * 100`. The observed `0x2328` reflects source halfword = 90 (i.e. 90.00 A continuous limit at the time). Configurable. |
 | 26  | 52-53 | 10 distinct values, varies with 27 | `*(u16)0x20000142`. **Independent source** - they only happen to track each other in steady state. |
 | 27  | 54-55 | 10 distinct values, varies with 26 | `*(u16)0x20000144`. Independent source. |

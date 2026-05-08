@@ -102,7 +102,7 @@ See [02-holding-registers.md](02-holding-registers.md) for full layout. Key valu
 | 1-4 | `0xFFFF` x 4 | Reserved / unused |
 | 5-9 | ASCII serial padded to 20 chars | E.g. `"EM2024G001          "` (ends with NUL byte) |
 | 10 | `0xFFFF` | Reserved |
-| 11 | `0x00BA` initially | Possibly transitions to `0x0174` after some condition - emulator can leave it static at `0x00BA` |
+| 11 | Total Ah of batteries online | Should normally be a fixed value based on actual capacity of batteries.  Can change if pack goes 'offline'. |
 | 12 | `0x0030` (48) | Hardware-rev constant |
 | 13 | `0x0BCE` (3022) | Firmware version - claim BMS 3022 |
 | 14 | `0x0000` | Status flag |
@@ -110,12 +110,12 @@ See [02-holding-registers.md](02-holding-registers.md) for full layout. Key valu
 | 16 | `0x0000` | Mode/state |
 | 17 | counter that ticks ~once per query | E.g. start at `0x114B` and increment |
 | 18 | `0x389D` | Constant device hash - any plausible value works |
-| 19 | `0x00CE` or `0x00CF` | 8-flag composite, occasionally toggles |
-| 20 | `0x0000` | |
-| 21 | SoC-related, typically 90-100 (`0x5A`-`0x64`) | If returning SoC |
-| 22 | `0x14C0` | Some narrow-drift field |
-| 23 | Signed pack current, 0.01 A units | E.g. `0x0000` for idle, or read from your real battery |
-| 24 | `0x0011` | |
+| 19 | BMS status (normally `0x00CE` or `0x00CF`) | 8-flag composite, see [02-holding-registers.md](02-holding-registers.md) |
+| 20 | Alarms | normally `0x0000`, see [02-holding-registers.md](02-holding-registers.md) |
+| 21 | Battery state of charge (0%-100%) | If returning SoC |
+| 22 | Battery voltage | Units of 0.01V |
+| 23 | Primary pack current | 0.01 A units, `0x0000` for idle, or read from your real battery.  If emulating multiple battery packs, divide actual current by number of packs |
+| 24 | Battery temperature | In degrees C |
 | 25 | `0x2328` (9000) | Current limit = 90.00 A |
 | 26 | Some 16-bit value that varies; identical to reg 27 | |
 | 27 | Same as reg 26 | |
