@@ -131,6 +131,7 @@ Using the `modbus_proxy` utility, individual registers can be individually manip
 
 | Register | Observation |
 |-|-|
+| 20 | Modify to 0x04 (Overvoltage) causes inverter to drop charge rate to 0, but has no impact on charge rate.  Modify to 0x08 (under-voltage) causes inverter to limit discharge to 340W. |
 | 21 | Directly affects SOC shown in GivEnergy mobile app (iOS) |
 | 26 | Directly affects the maximum charge rate by the inverter, shown in GivEnergy mobile app (iOS).  To repro: set inverter to full-rate charge (3000W), set field to `1000` (aka 10.00A), observe displayed charge rate drops to approx 500W. |
 | 27 | Directly affects the maximum discharge rate by the inverter, shown in GivEnergy mobile app (iOS).  To repro: set inverter to full-rate discharge (3000W), set field to `1000` (aka 10.00A), observe displayed discharge rate drops to approx 500W. |
