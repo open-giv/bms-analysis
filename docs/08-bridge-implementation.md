@@ -132,8 +132,10 @@ Mapping GivEnergy register fields to fields the bridge must produce:
 | Reg 13 = firmware version (3022) | optional - some target protocols include a version field |
 | Reg 17 / 18 = device ID (32-bit aggregate) | optional - serial identification |
 | Reg 19 = 8-flag composite status | bit-by-bit map to target protocol's protection / warning flags (semantics still partly TBD - see [02-holding-registers.md](02-holding-registers.md)) |
-| Reg 23 = signed primary pack current (0.01 A) | Pylontech CAN: `BatteryCurrent` in 0.1 A. Convert: multiply by number of packs, muliply by 10. |
-| Reg 25 = current limit constant (90.00 A) | Pylontech CAN: `MaxChargeCurrent` and `MaxDischargeCurrent` (in 0.1 A). Convert: multiply by 10. |
+| Reg 23 = signed primary pack current (0.01 A) | Pylontech CAN: `BatteryCurrent` in 0.1 A. Convert: multiply by number of packs, divide by 10. |
+| Reg 25 = current limit constant (90.00 A) | Pylontech CAN: TBC |
+| Reg 26 = dynamic charge current limit (0.01 A)| Pylontech CAN: `MaxChargeCurrent` (in 0.1 A). Convert: divide by 10. |
+| Reg 27 = dynamic discharge current limit (0.01 A) | Pylontech CAN: `MaxDischargeCurrent` (in 0.1 A). Convert: divide by 10. |
 
 ### From IR Block 1
 

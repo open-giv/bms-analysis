@@ -48,8 +48,8 @@ The 28 registers (= 56 bytes) decoded at the byte level:
 | 23  | 46-47 | Signed pack current in **0.1 A** (deciamps), positive = charge, negative = discharge. Primary pack only -- multi-pack inverters scale by pack count. | Computation: `(s16)int(*(float*)0x2000014C / 10.0)` via `__aeabi_fdiv` then `__aeabi_f2iz`. The source float is in **centi-amps** (0.01 A); dividing by 10 gives deciamps. **Note:** an earlier docs revision asserted 0.01 A units -- the firmware operation is unambiguously a divide by 10.0, so 0.1 A is correct. If GivTCP reports differently, that's an inverter-side reinterpretation worth tracking down. |
 | 24  | 48-49 | **Maximum** cell temperature in whole °C. | 4-element MAX loop over `*(u16*)0x200011B6..BA` (4 temperature samples, raw format `°C × 10 + 2730`). Computation: `(max_raw - 2730) / 10`. So `0x0019` (25) -> 25 °C max cell temperature. Earlier readings called this "min cell voltage" -- that was wrong on two counts: the loop finds max (not min) and the source array is temperatures (not voltages). |
 | 25  | 50-51 | constant `0x2328` (9000) in capture; **dynamic** when configured limit changes | `*(u16)(0x2000153A+8) × 100`. The `× 100` here is centi-amp scaling (0.01 A). Source at `0x2000153A+8` is **PACE slice 1, byte offset 8** (`g_pace_slice_table` base `0x200014EA` + slice 1 at `+0x50` + 8) -- a configured per-pack max-charge-current value, in whole amps (90 -> 9000). |
-| 26  | 52-53 | 10 distinct values, varies with 27 | **Cross-charge current target -- charge side** of the pack-pair balancing controller. `*(u16)0x20000142`, written by `compute_pack_current_limits` (flash `0x080167BA`) which iterates the 6 FC4 pack slots, computes per-pack min/max budgets, and runs a ramp-with-hysteresis controller (1 A/call ramp step, 30% of configured max as cap). Tracks HR27 in steady state by conservation (`charge_current = discharge_current` at the coupling point); diverges during transitions because each side has independent ramp + converge logic. |
-| 27  | 54-55 | 10 distinct values, varies with 26 | **Cross-charge current target -- discharge side**. `*(u16)0x20000144`, same writer function as HR26, mirrored logic. |
+| 26  | 52-53 | Charge limit in 0.01A, honoured by Giv inverter | **Cross-charge current target -- charge side** of the pack-pair balancing controller. `*(u16)0x20000142`, written by `compute_pack_current_limits` (flash `0x080167BA`) which iterates the 6 FC4 pack slots, computes per-pack min/max budgets, and runs a ramp-with-hysteresis controller (1 A/call ramp step, 30% of configured max as cap). Tracks HR27 in steady state by conservation (`charge_current = discharge_current` at the coupling point); diverges during transitions because each side has independent ramp + converge logic. |
+| 27  | 54-55 | Discharge limit in 0.01A, honoured by Giv inverter | **Cross-charge current target -- discharge side**. `*(u16)0x20000144`, same writer function as HR26, mirrored logic. |
 
 ### Register 19 Bits
 
@@ -124,6 +124,16 @@ This document has been audited against the firmware twice with conflicting resul
 - **Reg 24**: was `(min_cell_mV - 2730) / 10` -- corrected to **max cell temperature in °C** from a 4-element max loop. The first-pass reading had two errors: the loop finds max (not min), and the source array is temperature (raw `°C × 10 + 2730`), not cell voltage.
 - **Reg 25**: source was cited as `0x20001598` -- corrected to `*(u16*)(0x2000153A+8)` = PACE slice 1 byte 8.
 - **Reg 26 / Reg 27**: were "independent source, tracks each other in steady state" with no semantic -- corrected to **cross-charge current target (charge side / discharge side)**, written by `compute_pack_current_limits` with mirrored ramp-and-converge logic. Tracks each other in steady state by conservation of current at the pack-pair coupling point.
+
+## Inline protocol modification
+
+Using the `modbus_proxy` utility, individual registers can be individually manipulated to observe the external effects on the inverter.  So far, the following experiments have been performed:
+
+| Register | Observation |
+|-|-|
+| 21 | Directly affects SOC shown in GivEnergy mobile app (iOS) |
+| 26 | Directly affects the maximum charge rate by the inverter, shown in GivEnergy mobile app (iOS).  To repro: set inverter to full-rate charge (3000W), set field to `1000` (aka 10.00A), observe displayed charge rate drops to approx 500W. |
+| 27 | Directly affects the maximum discharge rate by the inverter, shown in GivEnergy mobile app (iOS).  To repro: set inverter to full-rate discharge (3000W), set field to `1000` (aka 10.00A), observe displayed discharge rate drops to approx 500W. |
 
 ## Cross-reference
 
