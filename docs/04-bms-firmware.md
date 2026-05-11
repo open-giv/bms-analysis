@@ -6,20 +6,36 @@ The official GivEnergy BMS firmware can be statically analysed to reveal the pro
 
 GivEnergy distributes the BMS firmware as `BMS_ARM.bin` files (one per firmware version). The format:
 
-- 4-byte vendor header: `0xVVVV 0x5566` (version little-endian + magic)
-- Standard Cortex-M vector table at file offset 4 (mapping to flash `0x08000000`)
-- Plain Thumb-2 code, no compression or encryption
+- 4-byte vendor header: `0xVVVV 0x5566` (version little-endian + magic). E.g. 3022 starts `CE 0B 66 55`.
+- Standard Cortex-M vector table at file offset 4.
+- **Load address is `0x08010000`** (NOT `0x08000000`). The first 64 KB of flash (`0x08000000`-`0x0800FFFF`) is reserved for the bootloader. Confirmed by reset-vector arithmetic: reset handler is at `0x08027C48` in 3022, which is inside the firmware range only if load is `0x08010000`. With load `0x08000000`, the reset vector would point outside the firmware.
+- Plain Thumb-2 code, no compression or encryption.
 
 Versions analysed:
 
-| Version | Size | Notes |
-|---:|---:|---|
-| 3017 | 143,370 bytes | Older code structure; major refactor before 3020 |
-| 3020 | 118,794 bytes | Functionally identical to 3022 for the wire protocol |
-| 3022 | 119,818 bytes | Reference version for analysis below |
-| Gen 3 / 4xxx | ~165 KB | Different protocol architecture, not analysed here |
+| Version | Size | Function count | Load address | Notes |
+|---:|---:|---:|---|---|
+| 3017 | 143,370 B | 443 | `0x08010000` | Older code structure; major refactor before 3020 |
+| 3020 | 118,794 B | 464 | `0x08010000` | Wire-protocol-identical to 3022 |
+| 3022 | 119,818 B | 492 | `0x08010000` | Reference version for analysis below |
+| Gen 3 / 4xxx | ~165 KB | -- | (different) | Different protocol architecture, not analysed here |
 
 3020 and 3022 produce byte-identical wire behaviour - addresses shift but field meanings don't change. 3017 has the same fields but different code structure.
+
+### Cross-version stability (audit, 2026-05)
+
+A focused cross-version diff of 3017/3020/3022 found the following stable across all three:
+
+- **Load address (`0x08010000`)** and 4-byte header pattern.
+- **Calibration polynomial constants** used by `compute_filtered_current` (the function that derives HR23 from the ADC ring buffer): `0.930`, `0.961`, `0.962` are byte-identical in the literal pools of all three versions. The current calibration is firmware-version-stable, not per-hardware-revision.
+- **Wire protocol layout** for HR(0..27) and IR blocks 1-3.
+
+What changed between versions:
+
+- **3017 -> 3020**: major code refactor. 24 KB of code removed, function count grew (443 -> 464). Same functionality, decomposed into smaller, more focused functions.
+- **3020 -> 3022**: incremental (+1 KB, +28 functions). The cross-charge controller `compute_pack_current_limits` appears to be a 3022-era addition: the FC4 pack table base `0x20003D6A` is referenced 8 times in 3022 and zero times in 3017/3020. HR26/27 source bytes (`0x20000142` / `0x20000144`) existed in earlier versions but with different reference patterns — the current iterating-over-6-pack-slots controller pattern is new in 3022.
+
+**Implications for emulators**: target 3022 wire behaviour as default. For older-firmware inverters, the HR26/27 fields may behave differently or be statically zero.
 
 ## MCU identification
 
