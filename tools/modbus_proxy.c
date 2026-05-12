@@ -5,16 +5,20 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
+#include <ctype.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <termios.h>
+#include <time.h>
 #include <unistd.h>
 
 #define READ_BUFFER_SIZE 256
 #define STREAM_BUFFER_SIZE 2048
 #define MAX_OVERRIDES 256
+#define BYTES_PER_LINE 16
+#define LOG_PATH_SIZE 512
 
 enum register_type {
     REGISTER_HOLDING = 0x03,
@@ -42,18 +46,13 @@ struct override_entry {
 };
 
 static volatile sig_atomic_t g_stop = 0;
-static int g_verbose = 0;
 
-static void trace_hex(const char *label, const uint8_t *data, size_t len)
-{
-    size_t i;
-
-    fprintf(stderr, "[TRACE] %s (%zu bytes):", label, len);
-    for (i = 0; i < len; ++i) {
-        fprintf(stderr, " %02X", data[i]);
-    }
-    fputc('\n', stderr);
-}
+struct proxy_log_state {
+    FILE *file;
+    int active;
+    uint64_t total_bytes;
+    char path[LOG_PATH_SIZE];
+};
 
 static void handle_signal(int sig)
 {
@@ -97,6 +96,111 @@ static int configure_serial_9600(int fd)
     }
 
     return 0;
+}
+
+static void make_timestamp(char *out, size_t out_size)
+{
+    struct timespec ts;
+    struct tm tm_local;
+    char base[32];
+
+    clock_gettime(CLOCK_REALTIME, &ts);
+    localtime_r(&ts.tv_sec, &tm_local);
+    strftime(base, sizeof(base), "%Y-%m-%d %H:%M:%S", &tm_local);
+
+    snprintf(out, out_size, "%s.%03ld", base, ts.tv_nsec / 1000000L);
+}
+
+static void log_hexdump(FILE *log_file, const uint8_t *buf, size_t len, uint64_t *total_bytes)
+{
+    size_t i;
+
+    for (i = 0; i < len; i += BYTES_PER_LINE) {
+        size_t j;
+        size_t line_len = len - i;
+        char timestamp[48];
+
+        if (line_len > BYTES_PER_LINE) {
+            line_len = BYTES_PER_LINE;
+        }
+
+        make_timestamp(timestamp, sizeof(timestamp));
+        fprintf(log_file, "%s  %08llx  ", timestamp, (unsigned long long)(*total_bytes + (uint64_t)i));
+
+        for (j = 0; j < BYTES_PER_LINE; ++j) {
+            if (j < line_len) {
+                fprintf(log_file, "%02X ", buf[i + j]);
+            } else {
+                fputs("   ", log_file);
+            }
+        }
+
+        fputs(" |", log_file);
+        for (j = 0; j < line_len; ++j) {
+            unsigned char c = buf[i + j];
+            fputc(isprint(c) ? c : '.', log_file);
+        }
+        fputs("|\n", log_file);
+    }
+
+    *total_bytes += (uint64_t)len;
+    fflush(log_file);
+}
+
+static void make_default_log_path(char *out, size_t out_size)
+{
+    time_t now = time(NULL);
+    struct tm tm_local;
+
+    localtime_r(&now, &tm_local);
+    strftime(out, out_size, "proxy_log_%Y%m%d_%H%M%S.log", &tm_local);
+}
+
+static int start_logging(struct proxy_log_state *log_state, const char *path)
+{
+    FILE *f;
+
+    if (log_state->active) {
+        puts("Logging is already active; run 'log stop' first.");
+        return -1;
+    }
+
+    f = fopen(path, "a");
+    if (f == NULL) {
+        perror("open log file");
+        return -1;
+    }
+
+    log_state->file = f;
+    log_state->active = 1;
+    log_state->total_bytes = 0;
+    snprintf(log_state->path, sizeof(log_state->path), "%s", path);
+    printf("Logging started: %s\n", log_state->path);
+    return 0;
+}
+
+static void stop_logging(struct proxy_log_state *log_state)
+{
+    if (!log_state->active) {
+        puts("Logging is not active.");
+        return;
+    }
+
+    fclose(log_state->file);
+    log_state->file = NULL;
+    log_state->active = 0;
+    log_state->total_bytes = 0;
+    printf("Logging stopped: %s\n", log_state->path);
+    log_state->path[0] = '\0';
+}
+
+static void maybe_log_bytes(struct proxy_log_state *log_state, const uint8_t *data, size_t len)
+{
+    if (!log_state->active || len == 0) {
+        return;
+    }
+
+    log_hexdump(log_state->file, data, len, &log_state->total_bytes);
 }
 
 static uint16_t modbus_crc16(const uint8_t *data, size_t len)
@@ -529,7 +633,8 @@ static int process_downstream_buffer(uint8_t *buffer,
                                      size_t *buffered_len,
                                      int output_fd,
                                      struct pending_request_slot *pending_request,
-                                     const struct override_entry *overrides)
+                                     const struct override_entry *overrides,
+                                     struct proxy_log_state *log_state)
 {
     size_t offset = 0;
 
@@ -545,9 +650,7 @@ static int process_downstream_buffer(uint8_t *buffer,
             if (write_all(output_fd, buffer + offset, frame_len) != 0) {
                 return -1;
             }
-            if (g_verbose) {
-                trace_hex("proxy->controller tx", buffer + offset, frame_len);
-            }
+            maybe_log_bytes(log_state, buffer + offset, frame_len);
             offset += frame_len;
             continue;
         }
@@ -556,9 +659,7 @@ static int process_downstream_buffer(uint8_t *buffer,
             if (write_all(output_fd, buffer + offset, 1) != 0) {
                 return -1;
             }
-            if (g_verbose) {
-                trace_hex("proxy->controller tx (drop-byte passthrough)", buffer + offset, 1);
-            }
+            maybe_log_bytes(log_state, buffer + offset, 1);
             offset += 1;
             continue;
         }
@@ -579,6 +680,8 @@ static void print_console_help(void)
     puts("Commands:");
     puts("  set <device_id> <holding|input> <register> <value>");
     puts("  clear <device_id> <holding|input> <register>");
+    puts("  log start [file]");
+    puts("  log stop");
     puts("  list");
     puts("  help");
     puts("  quit");
@@ -590,7 +693,9 @@ static void print_prompt(void)
     fflush(stdout);
 }
 
-static void handle_console_line(char *line, struct override_entry *overrides)
+static void handle_console_line(char *line,
+                                struct override_entry *overrides,
+                                struct proxy_log_state *log_state)
 {
     char *saveptr = NULL;
     char *command = strtok_r(line, " \t\r\n", &saveptr);
@@ -703,6 +808,39 @@ static void handle_console_line(char *line, struct override_entry *overrides)
         return;
     }
 
+    if (strcmp(command, "log") == 0) {
+        char *subcommand = strtok_r(NULL, " \t\r\n", &saveptr);
+
+        if (subcommand == NULL) {
+            puts("Usage: log <start [file]|stop>");
+            return;
+        }
+
+        if (strcmp(subcommand, "start") == 0) {
+            char *file_text = strtok_r(NULL, " \t\r\n", &saveptr);
+            char default_path[LOG_PATH_SIZE];
+            const char *path;
+
+            if (file_text != NULL) {
+                path = file_text;
+            } else {
+                make_default_log_path(default_path, sizeof(default_path));
+                path = default_path;
+            }
+
+            (void)start_logging(log_state, path);
+            return;
+        }
+
+        if (strcmp(subcommand, "stop") == 0) {
+            stop_logging(log_state);
+            return;
+        }
+
+        puts("Usage: log <start [file]|stop>");
+        return;
+    }
+
     puts("Unknown command. Type 'help' for commands.");
 }
 
@@ -745,21 +883,16 @@ int main(int argc, char *argv[])
     size_t downstream_buffered_len = 0;
     struct pending_request_slot pending_request;
     struct override_entry overrides[MAX_OVERRIDES];
+    struct proxy_log_state log_state;
 
-    if (argc == 4) {
-        if (strcmp(argv[3], "-v") == 0) {
-            g_verbose = 1;
-        } else {
-            fprintf(stderr, "Usage: %s <controller_serial_port> <bus_serial_port> [-v]\n", argv[0]);
-            return 1;
-        }
-    } else if (argc != 3) {
-        fprintf(stderr, "Usage: %s <controller_serial_port> <bus_serial_port> [-v]\n", argv[0]);
+    if (argc != 3) {
+        fprintf(stderr, "Usage: %s <controller_serial_port> <bus_serial_port>\n", argv[0]);
         return 1;
     }
 
     memset(&pending_request, 0, sizeof(pending_request));
     memset(overrides, 0, sizeof(overrides));
+    memset(&log_state, 0, sizeof(log_state));
 
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = handle_signal;
@@ -883,7 +1016,7 @@ int main(int argc, char *argv[])
     consume_upstream_requests(upstream_parse_buffer, &upstream_buffered_len, &pending_request);
     if (downstream_buffered_len > 0) {
         if (process_downstream_buffer(downstream_parse_buffer, &downstream_buffered_len,
-                                      controller_fd, &pending_request, overrides) != 0) {
+                                      controller_fd, &pending_request, overrides, &log_state) != 0) {
             close(bus_fd);
             close(controller_fd);
             return 1;
@@ -908,18 +1041,12 @@ int main(int argc, char *argv[])
             if (bytes_read > 0) {
                 size_t chunk_len = (size_t)bytes_read;
 
-                if (g_verbose) {
-                    trace_hex("controller->proxy rx", read_buffer, chunk_len);
-                }
-
                 if (write_all(bus_fd, read_buffer, chunk_len) != 0) {
                     perror("write bus serial port");
                     break;
                 }
 
-                if (g_verbose) {
-                    trace_hex("proxy->bus tx", read_buffer, chunk_len);
-                }
+                maybe_log_bytes(&log_state, read_buffer, chunk_len);
 
                 if (upstream_buffered_len + chunk_len > sizeof(upstream_parse_buffer)) {
                     size_t drop = upstream_buffered_len + chunk_len - sizeof(upstream_parse_buffer);
@@ -950,10 +1077,6 @@ int main(int argc, char *argv[])
             if (bytes_read > 0) {
                 size_t chunk_len = (size_t)bytes_read;
 
-                if (g_verbose) {
-                    trace_hex("bus->proxy rx", read_buffer, chunk_len);
-                }
-
                 if (downstream_buffered_len + chunk_len > sizeof(downstream_parse_buffer) &&
                     downstream_buffered_len > 0) {
                     size_t overflow = downstream_buffered_len + chunk_len - sizeof(downstream_parse_buffer);
@@ -966,9 +1089,7 @@ int main(int argc, char *argv[])
                         perror("write controller serial port");
                         g_stop = 1;
                     } else {
-                        if (g_verbose) {
-                            trace_hex("proxy->controller tx (overflow flush)", downstream_parse_buffer, overflow);
-                        }
+                        maybe_log_bytes(&log_state, downstream_parse_buffer, overflow);
 
                         memmove(downstream_parse_buffer,
                                 downstream_parse_buffer + overflow,
@@ -988,7 +1109,8 @@ int main(int argc, char *argv[])
                                               &downstream_buffered_len,
                                               controller_fd,
                                               &pending_request,
-                                              overrides) != 0) {
+                                              overrides,
+                                              &log_state) != 0) {
                     perror("write controller serial port");
                     break;
                 }
@@ -1004,12 +1126,16 @@ int main(int argc, char *argv[])
             if (fgets(line, sizeof(line), stdin) == NULL) {
                 g_stop = 1;
             } else {
-                handle_console_line(line, overrides);
+                handle_console_line(line, overrides, &log_state);
                 if (!g_stop) {
                     print_prompt();
                 }
             }
         }
+    }
+
+    if (log_state.active) {
+        stop_logging(&log_state);
     }
 
     close(bus_fd);

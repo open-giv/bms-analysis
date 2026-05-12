@@ -38,6 +38,7 @@ The original empirical analysis - hardware setup, RS485 captures, raw hex traces
 |---|---|
 | [tools/serial_hexdump_logger.c](tools/serial_hexdump_logger.c) | Logs all RS485 traffic with timestamps to a file. Useful for protocol analysis. |
 | [tools/modbus_register_logger.c](tools/modbus_register_logger.c) | Passively watches the bus for reads/responses involving a specific register, logs that register's value over time (text or CSV). Useful for tracking how a single field varies under known conditions. |
+| [tools/modbus_proxy.c](tools/modbus_proxy.c) | Requires two USB RS485 dongles, sits actively in the path, able to modify in-flight register values and dump RS485 traffic to file on-command. |
 | [tools/parse_log.py](tools/parse_log.py) | Parses serial_hexdump_logger output into Modbus frames with cadence/latency analysis. Handles GivEnergy's non-standard FC=4 framing. |
 | [tools/tcp_poller.py](tools/tcp_poller.py) | Polls the inverter's local Modbus TCP API at a fixed cadence and emits NDJSON. Used as a labelled ground-truth stream during a wire-capture campaign. |
 | [tools/tag.py](tools/tag.py) | Manual + auto scenario annotation helper. Manual mode appends one timestamped tag; auto mode tails a TCP NDJSON file and emits tags on state changes. |
