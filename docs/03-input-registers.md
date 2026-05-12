@@ -157,6 +157,76 @@ f5 56 f5 56                                                    ; max/min = 0xF55
 
 Important for emulators that want to support multi-battery configurations: if you only emulate one battery at device 1, the inverter will still poll devices 2-5. Either respond with the absent-device pattern (cleanest), or don't respond at all (the bus times out, then HR resumes).
 
+## Firmware-side source mapping (empirical, Unicorn-verified)
+
+The wire-byte layouts above were originally derived from Ken's wire captures. The BMS firmware (v3022) was subsequently driven directly under Unicorn to confirm, for every wire byte, the corresponding source position in the per-pack data struct that the firmware reads from. This section documents those source mappings so an emulator can populate the right per-pack offsets and trust the wire output will match.
+
+### Per-pack struct
+
+Each pack slot is **145 bytes (`0x91`)** at SRAM `0x20003D6A + slot * 145`, where `slot = min((slave - 1) & 0xff, 6)`. The clamp-to-6 allows slave addresses >= 7 to read from the 7th 145-byte slot beyond the documented 6 packs - an off-by-one quirk of the bounds check at flash `0x0801DF50`. Slaves 1..6 map to slots 0..5 cleanly.
+
+### Storage rule
+
+Multi-byte fields are stored **little-endian** in the per-pack struct and emitted **big-endian** on the wire. The handler reads each u16/u32 with a native LE load and writes byte-by-byte in BE order, so the net effect on the wire is a byte-swap of the source. Single-byte reads pass through unchanged.
+
+### Block 1 source mapping (start=0x0000, count=21)
+
+| Wire offset | Source pack offset | Encoding |
+|---:|---|---|
+| 0-20  | pack[0x02 .. 0x16] (21 bytes) | direct byte copy - the ASCII serial pad |
+| 21    | (none) | constant 0 (padding) |
+| 22-23 | pack[0x79] u16 LE | `(value - 0xAAA)` BE = decideg temp 1 |
+| 24-25 | pack[0x7B] u16 LE | temp 2 |
+| 26-27 | pack[0x7D] u16 LE | temp 3 |
+| 28-29 | pack[0x7F] u16 LE | temp 4 |
+| 30-31 | pack[0x81] u16 LE | temp 5 |
+| 32-33 | pack[0x00 .. 0x01] u16 LE | byte-swap (semantic TBD; docs/03 main table shows "unknown, observed 0x0001") |
+| 34    | (none) | constant 0 |
+| 35    | pack[0x83] | direct byte (per docs/03 main table, "observed 0x08") |
+| 36-41 | (none) | constant 0 |
+
+### Block 2 source mapping (start=0x0015, count=19)
+
+| Wire offset | Source pack offset | Encoding |
+|---:|---|---|
+| 0     | pack[0x2C] | byte (cell count per docs/03) |
+| 1-2   | pack[0x2D .. 0x2E] u16 LE | byte-swap to BE (cycles) |
+| 3-6   | pack[0x2F .. 0x32] u32 LE | byte-swap to BE |
+| 7-8   | pack[0x33 .. 0x34] u16 LE | byte-swap to BE (pack voltage) |
+| 9-12  | pack[0x35 .. 0x38] u32 LE | byte-swap to BE |
+| 13-16 | pack[0x39 .. 0x3C] u32 LE | byte-swap to BE (calibrated capacity) |
+| 17-20 | pack[0x3D .. 0x40] u32 LE | byte-swap to BE (design capacity) |
+| 21-24 | pack[0x41 .. 0x44] u32 LE | byte-swap to BE (remaining capacity) |
+| 25    | pack[0x88] | byte (SoC %) |
+| 26-34 | pack[0x46 .. 0x4E] (9 bytes) | direct byte copy |
+| 35-36 | pack[0x77 .. 0x78] u16 LE | byte-swap to BE = firmware version (3022 -> wire `0B CE`) |
+| 37    | (none) | constant 0 |
+
+### Block 3 source mapping (start=0x0028, count=20)
+
+| Wire offset | Source pack offset | Encoding |
+|---:|---|---|
+| 0-31  | pack[0x53 .. 0x72] (16x u16 LE) | byte-swap per cell to BE; **raw mV, no offset** |
+| 32-33 | pack[0x73 .. 0x74] u16 LE | `(value - 0xAAA)` BE |
+| 34-35 | pack[0x75 .. 0x76] u16 LE | `(value - 0xAAA)` BE |
+| 36-37 | pack[0x4F .. 0x50] u16 LE | byte-swap to BE (max cell mV) |
+| 38-39 | pack[0x51 .. 0x52] u16 LE | byte-swap to BE (min cell mV) |
+
+### Validation envelope (firmware-imposed)
+
+The handler rejects requests where:
+
+- `count == 0` or `count > 60` (0x3C)
+- `start + count` would cross a 60-register block boundary
+
+A request that fails validation produces a Modbus exception response (`slave | 0x84 | CRC`). All three documented blocks (0/21, 0x15/19, 0x28/20) fall inside their respective 60-byte sub-block, so legitimate inverter polls always pass.
+
+### Methodology
+
+Confirmed by driving the BMS firmware's FC=4 handler (`fc4_handler` at flash `0x0801DEBC`) directly under Unicorn Engine. For each block, the per-pack struct was pre-populated with distinctive markers at every byte position, the handler was invoked with R0 = RX-frame pointer (0x2000385C) and R1 = FC byte (4), and the resulting TX-buffer bytes at 0x200038C0 were compared against expected marker positions. The handler's slot-index logic was independently verified by populating multiple slots with different markers and varying the slave byte in the RX frame.
+
+The fc4_handler entry address corrected an earlier off-by-4 noted in the working notes (`0x0801DEB8` -> `0x0801DEBC`); calling at the older address landed inside the preceding function and produced an empty addr-echo response with no body data.
+
 ## Cross-reference
 
 For the original empirical analysis (raw hex traces, Ken's first-pass interpretations of all three blocks), see [NOTES.md](../NOTES.md) ("Input Registers" section).
