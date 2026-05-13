@@ -62,7 +62,7 @@ def build():
         "fig, axes = plt.subplots(3, 1, figsize=(12, 8), sharex=True)\n"
         "axes[0].plot(df['ts'], df.get('tcp_battery_soc', pd.Series([], dtype=float)), label='TCP SoC')\n"
         "axes[0].set_ylabel('SoC %')\n"
-        "axes[1].plot(df['ts'], df.get('hr23_pack_current_dA', pd.Series([], dtype=float)) / 10, label='Pack current (A)')\n"
+        "axes[1].plot(df['ts'], df.get('hr23_pack_current_cA', pd.Series([], dtype=float)) / 100, label='Pack current (A)')\n"
         "axes[1].set_ylabel('A')\n"
         "axes[2].plot(df['ts'], df.get('pack_voltage_mV', pd.Series([], dtype=float)) / 1000, label='Pack V')\n"
         "axes[2].set_ylabel('V')\n"

@@ -25,7 +25,7 @@ def test_decode_hr_response_returns_known_field_set():
     fields = decode_hr_response(data)
     expected = {
         "hr11_soc_x100", "hr17_dynamic", "hr19_status",
-        "hr23_pack_current_dA", "hr25_current_limit",
+        "hr23_pack_current_cA", "hr25_current_limit",
     }
     assert expected.issubset(fields.keys())
 
@@ -33,7 +33,7 @@ def test_decode_hr_response_returns_known_field_set():
 def test_decode_hr_response_pack_current_in_plausible_range():
     data = (FIXTURES / "sample_hr_response.bin").read_bytes()
     fields = decode_hr_response(data)
-    assert -60000 <= fields["hr23_pack_current_dA"] <= 60000
+    assert -60000 <= fields["hr23_pack_current_cA"] <= 60000
 
 
 def test_decode_hr_response_status_byte_fits_8_bits():

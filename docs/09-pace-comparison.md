@@ -23,7 +23,7 @@ This matters for two reasons:
 | IR Block 2 bytes 7-8 | Pack voltage (mV) | `PACK_VOLTAGE` (mV) | Yes |
 | IR Block 2 bytes 15-16 | Calibrated capacity (0.1 Ah) | `TOTAL_CAP` (`USERDEF`-controlled unit) | Yes |
 | IR Block 2 bytes 23-24 | Remaining capacity (0.1 Ah) | `REMAIN_CAP` | Yes |
-| HR reg 23 (bytes 46-47) | Pack current (signed deciAmps) | `PACK_CURRENT` (signed 0.1 A) | Yes - same unit |
+| HR reg 23 (bytes 46-47) | Pack current (signed centi-amps, 0.01 A) | `PACK_CURRENT` (signed 0.1 A) | GivEnergy at higher precision -- bridge to PACE must divide by 10 |
 | IR Block 3 bytes 36-37 | Max cell voltage (mV) | Not in standard PACE Get Analog - clients compute | GivEnergy explicit |
 | IR Block 3 bytes 38-39 | Min cell voltage (mV) | Not in standard PACE Get Analog - clients compute | GivEnergy explicit |
 | IR Block 2 byte 25 | SoC % (direct) | Not in standard PACE Get Analog - clients compute from REMAIN/TOTAL | GivEnergy explicit |
@@ -66,7 +66,7 @@ struct pack_state {
     uint16_t cell_mV[16];        // raw, big-endian on the wire
     uint8_t  temp_count;         // typically 5
     int16_t  temp_decidegC[5];   // signed, raw on the wire (subw bias is firmware-internal)
-    int16_t  pack_current_dA;    // signed deciAmps
+    int16_t  pack_current_cA;    // signed centi-amps (0.01 A); GivEnergy wire unit
     uint16_t pack_voltage_mV;
     uint16_t total_cap_cAh;
     uint16_t remain_cap_cAh;
@@ -103,7 +103,7 @@ Most field-by-field translations are direct:
 | pack_state field | Pylontech CAN |
 |---|---|
 | `pack_voltage_mV` | divide by 10 -> `BatteryVoltage` (0.01 V) |
-| `pack_current_dA` | already 0.1 A -> `BatteryCurrent` direct |
+| `pack_current_cA` | divide by 10 -> `BatteryCurrent` (0.1 A) |
 | `soc_pct` | direct |
 | `total_cap_cAh` | divide by 10 -> `RatedCapacity` (0.1 Ah) |
 | `cell_mV[]` | compute min/max -> `MinCellVoltage`, `MaxCellVoltage` (1 mV) |
