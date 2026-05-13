@@ -113,6 +113,102 @@ The internal storage bias of `+2730` for temperatures is presumably to keep them
 
 For an emulator: emit cells / max / min as raw mV; emit Block 1 temps as raw decidegC (signed int16 if you need negative temperatures); emit Block 3 bytes 32-35 as `(your_mV_value - 2730)`.
 
+## Runtime mirror tasks (dynamic-trace findings)
+
+The HR table's volatile fields (HR11, HR20 D8/D9, HR21) are not written directly by visible code paths. They're populated each tick by a chain of three "hidden" functions that Ghidra's autoanalysis missed entirely -- no auto-created function entries, no resolvable callers. They were located by **dynamic execution under Unicorn**: hook `UC_HOOK_MEM_WRITE` on the watched SRAM range, call candidate function entries, and observe which one fires the hook.
+
+### FUN_0802224C - the giant pack-walking scheduler tick
+
+Flash entry `0x0802224C` (no Ghidra auto-fn). 10-register `push.w` prologue. The function walks the 6 FC=4 pack slots and aggregates state into the HR-source struct:
+
+| PC | Writes | Semantic |
+|---|---|---|
+| `0x08022284` | `*(float*)0x20000180 = uint_to_float(*(u16*)0x20000186)` | HR11 float mirror (= `uint_to_float(remaining_cAh)`) |
+| `0x080224A0` | (same site in an alternate path) | HR11 float mirror |
+| `0x080224A6` | `*(u16*)0x20000184 = *(u8*)0x20000189` (zero-extended) | HR21 u16 mirror (= SoC %) |
+| `0x0802257A` | `*(u16*)0x20000184 = new_value` only if `|new - current| <= 1` | HR21 delta-limiter |
+| `0x08022618` | `*(u16*)0x20000184 = 100` | HR21 clamp-to-100 (calibration path) |
+| `0x08022442` | `*(u8*)0x200000D8 = aggregate(pack[N*145 + 0x8D])` | HR20 bit 3 (Under-Voltage) global aggregate |
+| `0x08022456` | `*(u8*)0x200000D9 = aggregate(pack[N*145 + 0x8D])` | HR20 bit 2 (Over-Voltage) global aggregate |
+
+The HR21 delta-limiter explains the slow SoC drift Ken observed across the capture window: even when the upstream SoC byte at `0x20000189` jumps, the mirror only advances `±1` per tick.
+
+### FUN_080181F2 - the SoC computer
+
+Flash entry `0x080181F2` (no Ghidra auto-fn). 8-register `push.w` prologue. Gated by a `0x1A5E00` (~1.7M) tick counter -- the SoC value is only recomputed periodically. When the gate fires:
+
+```c
+if (counter++ >= 0x1A5E00) {
+    counter = 0;
+    float design = *(float*)0x20000168;     // EEPROM-persisted design capacity
+    float remain = *(float*)0x2000017C;     // EEPROM-persisted remaining capacity
+    if (remain > design) {                  // "calibration trigger" condition
+        *(u8*)0x20000188 = 100;             // max-SoC tracker
+        if (some_flag == 1 || current_SoC == 100) {
+            *(u8*)0x20000189 = 100;         // clamp
+        } else {
+            // soc = (remain / design) * 100.0 + 0.5  (round)
+            *(u8*)0x20000189 = (u8)(remain / design * 100.0f);
+        }
+    }
+}
+```
+
+Float literals embedded in the function: `0x3FE00000` = `0.5f` (rounding), `0x42C80000` = `100.0f` (percent scale). Both source floats are loaded from EEPROM at boot by `FUN_080134B0` (the BMS state struct loader spanning SRAM `0x20000160..0x20000196`).
+
+### Parent scheduler X (no Ghidra auto-fn) at flash `0x08011876`
+
+Calls `FUN_0801151E` (protection-bit setter) and `FUN_0802224C` (HR mirror task) in a loop. No `push` prologue (uses no callee-saved registers), no `BL`/`B`/`BX` caller anywhere in firmware, and its address does NOT appear as a 4-byte data literal. Conclusion: invoked via a **SRAM-resident function-pointer table populated at boot**, which is built dynamically and invisible to static analysis.
+
+### Source-byte chain summary
+
+```
+[opaque coulomb counter]
+    writes *(u16*)0x20000186 (remaining cAh) and *(float*)0x2000017C (calibrated remaining)
+        |
+        v
+FUN_080181F2 reads 0x2000017C / 0x20000168 -> writes *(u8*)0x20000189   (canonical SoC byte)
+        |
+        v
+FUN_0802224C reads 0x20000186 -> writes *(float*)0x20000180 (HR11 mirror)
+              reads 0x20000189 -> writes *(u16*)0x20000184 (HR21 mirror, delta-limited)
+              walks packs[0..5][0x8D] -> writes *(u8*)0x200000D8 / D9 (HR20 OV/UV aggregates)
+        |
+        v
+fc3_update_task reads HR11 mirror -> writes whole-Ah into HR table @ HR[11]
+                  reads HR21 mirror -> writes u16 into HR table @ HR[21]
+                  reads D8 / D9 -> contributes to HR table @ HR[20]
+```
+
+For an emulator that runs the firmware in Unicorn as a backend: write directly to `*(u16*)0x20000186` (cAh) and `*(u8*)0x20000189` (SoC) and the mirror cascade will populate the HR table each tick. The opaque upstream coulomb counter is not needed.
+
+### Alarm source architecture
+
+The three packed alarm bitmaps that feed HR19 bits 7,8 and HR20 bits 1,2,5-8 share a common architecture:
+
+| Byte | Semantic | Setters | Clearer state machine |
+|---|---|---|---|
+| `0x20000279` | Current alarm bitmap (over-current, short-current) | `pace_cid2_dispatch` (mostly) + scattered per-protection setters | `FUN_0801ED08` |
+| `0x2000027A` | Temperature alarm bitmap (4 bits: charge/discharge over/under-temp) | `pace_cid2_dispatch` + per-protection setters | `FUN_0801F02C` |
+| `0x2000027B` | Voltage alarm bitmap | `pace_cid2_dispatch` (primary) + `FUN_0801F3F4` | `FUN_0801F3F4` |
+
+All three clearer functions share the same structure: iterate 8 bits, check per-bit recovery thresholds for 3+ cycles, then clear via `*byte = *byte & ~mask`. The **set** side is driven primarily by incoming PACE frames from the AFE chip -- the BMS receives alarm bits from the AFE and forwards them; it does not generate them locally.
+
+This three-byte split (current / temperature / voltage) lines up exactly with the three alarm-category clusters in GivTCP's `battery_fault_code` enum.
+
+The "any protection active" byte at `*(u8*)0x2000009D` (HR19 bit 4 source) is a separate aggregate: setter analysis shows **only bit 1** is ever set or cleared in this byte. Effectively a single boolean, not an 8-bit bitmap. Setters: `FUN_0801151E` (counter timeout `>= 100`) and `FUN_0801ED08` (AFE-flag-set path); both `ORR #0x02`. The 8-bit iteration inside `FUN_0801ED08` is over a DIFFERENT upstream event bitmap; the aggregated result lands in bit 1 of `0x2000009D`.
+
+### Limits - what static + dynamic both miss
+
+Several writers remain opaque even after dynamic Unicorn tracing of all candidate function entries (492 Ghidra functions + 446 push-prologue addresses + 14 IRQ vector handlers):
+
+- **HR11 cAh u16 writer** (`*(u16*)0x20000186`): hypothesis is a pack-online state-change handler that fires only when a new pack appears on the PACE bus. Would require sustained simulation with synthesized AFE traffic.
+- **HR15 bits 1/2 sources** (`*(u8*)0x20000197` / `0x20000198`): written inside `pace_cid2_dispatch` via base+offset addressing, only when a valid PACE frame is in the RX buffer.
+- **HR16 source** (`*(u8*)0x20000518`): same situation -- PACE-derived, requires frame injection.
+- **Block 3 mystery field sources** (`pack[N*145 + 0x73..0x76]`): same -- written by deep PACE chain.
+
+All four share one root cause: they're populated by PACE-protocol code paths that fire only on bus events. For an emulator that synthesizes wire output directly, none matter; for a deeper firmware-internals model, frame injection or long-running simulation would be needed.
+
 ## Inter-pack PACE channel (UART4)
 
 The BMS firmware also implements a **PACE / Pylontech-compatible protocol on UART4** (peripheral base `0x4000_4C00`), used for communication between paralleled batteries in a stack.
