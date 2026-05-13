@@ -163,8 +163,15 @@ Calls `FUN_0801151E` (protection-bit setter) and `FUN_0802224C` (HR mirror task)
 ### Source-byte chain summary
 
 ```
-[opaque coulomb counter]
-    writes *(u16*)0x20000186 (remaining cAh) and *(float*)0x2000017C (calibrated remaining)
+[AFE chip -- sends PACE frames with CID2 = 0xA7]
+    pace_cid2_dispatch CID2=0xA7 handler at flash 0x0801AB7C / 0x0801AB90:
+       reads 4 ASCII hex chars from INFO offsets 0x15..0x18,
+       decodes via hex_pair_to_byte (0x08010FD6),
+       writes *(u16*)0x20000186 (remaining cAh)
+        |
+        v
+[upstream calibrated-capacity writer, still TBD]
+    writes *(float*)0x2000017C (calibrated remaining float)
         |
         v
 FUN_080181F2 reads 0x2000017C / 0x20000168 -> writes *(u8*)0x20000189   (canonical SoC byte)
@@ -180,7 +187,14 @@ fc3_update_task reads HR11 mirror -> writes whole-Ah into HR table @ HR[11]
                   reads D8 / D9 -> contributes to HR table @ HR[20]
 ```
 
-For an emulator that runs the firmware in Unicorn as a backend: write directly to `*(u16*)0x20000186` (cAh) and `*(u8*)0x20000189` (SoC) and the mirror cascade will populate the HR table each tick. The opaque upstream coulomb counter is not needed.
+For an emulator that runs the firmware in Unicorn as a backend: write directly to `*(u16*)0x20000186` (cAh) and `*(u8*)0x20000189` (SoC) and the mirror cascade will populate the HR table each tick. Or, if going through the full PACE chain, send a CID2 = 0xA7 frame with 4 ASCII hex chars encoding the cAh value at INFO offsets 0x15-0x18.
+
+**Discovered via Cortex-M boot-from-reset Unicorn harness (2026-05-13)**: ran fc3_init + fc3_update_task to populate the HR table, then drove the PACE byte handler (entry `0x0801983C`, takes byte in r0) with synthesized PACE frames, then invoked `pace_cid2_dispatch` past its initial BGT (`0x0801A17C`) with each CID2 0x00..0xFF. Only CID2 = 0xA7 produced writes to `0x20000186`.
+
+Also discovered via the same harness:
+- **CID2 = 0xB1, 0xB2** write the BCD serial buffer at `0x20000190..0x20000195` (the source for the HR17 / HR18 device-fingerprint hash). So 0xB1 / 0xB2 are the AFE -> BMS "set device serial" commands.
+- **CID2 = 0xB3** writes adjacent fields at `0x2000018C / 0x2000018E` (likely other capacity-related fields).
+- **CID2 = 0xA4** is a soft-reset memset that clears a large contiguous SRAM region (PC `0x0802B5DC` with 4-byte stride). Touches many addresses incidentally but isn't a semantic per-field writer.
 
 ### Alarm source architecture
 
