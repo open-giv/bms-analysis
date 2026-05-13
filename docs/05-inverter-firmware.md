@@ -88,16 +88,16 @@ The FA inverter exposes HR readings on its Modbus-TCP API via `FUN_08015dcc` -- 
 - **HR3 and HR4 are firmware-duplicates**: both load identical bytes from `*0x2000c9d4`. The inverter exposes the same value for both. Emulators must supply identical values for HR3 and HR4 to avoid surprising the inverter.
 - **HR21 / HR22 share a 32-bit word internally** (`{s16 SoC, u16 voltage}` packed at `0x2000c3a0`). Wire format unchanged; just an internal storage detail.
 - **HR26 / HR27 share a 32-bit word internally**, with HR27 extracted via `asr #16` (signed upper halfword). The inverter treats HR27 as signed.
-- **No unit scaling for HR23**: the inverter reads the raw u16 with no `sdiv` -- confirming the BMS-side analysis that HR23 is already in deci-amps (0.1 A) on the wire. Adjacent HR24 has explicit `sdiv 10`. HR8/9/10/18/20/30/42/43 also divide by 10; HR198 divides by 100.
+- **No unit scaling for HR23**: the inverter reads the raw u16 with no `sdiv` -- the wire bytes are passed through verbatim to whatever consumer reads them. Adjacent HR24 has explicit `sdiv 10`. HR8/9/10/18/20/30/42/43 also divide by 10; HR198 divides by 100. The lack of `sdiv` on HR23 doesn't tell us the wire unit by itself -- it tells us that whatever the wire unit is, that's the unit the inverter exposes downstream. **Wire unit determined empirically as centi-amps (0.01 A)**: Ken's app shows ~1.53 kW total at ~53 V across 2 paralleled packs = 14.4 A per pack, and HR23 wire = 1490, which only makes sense as 0.01 A units (149 A in deci-amps is impossible for these batteries). See [HR23 row in docs/02](02-holding-registers.md) for the full BMS-side derivation.
 
 #### Dual current-sensor architecture
 
 The FA inverter has **two independent current measurements**, often confused:
 
-- **HR23** (Modbus RS485 from BMS): **deci-amps (0.1 A)**. Computed by the BMS from its own ADC ring buffer + 5-segment piecewise polynomial calibration. Reports primary-pack current only.
-- **`i_battery` at IR(51)** (Modbus TCP exposed to clients including GivTCP): **centi-amps (0.01 A)**. Computed independently by the FA inverter's secondary ARM (`FA_A2_03.bin`) by sampling PA0 (ADC1 channel 0) at 512-sample windows, computing true-RMS (sum-of-squares + integer sqrt + offset cal + 2.260 scale), then forwarding via USART1 (38400 baud) to the main ARM.
+- **HR23** (Modbus RS485 from BMS): **centi-amps (0.01 A)**, signed. Computed by the BMS from its own ADC ring buffer + 5-segment piecewise polynomial calibration. Reports primary-pack current only. Wire bytes pass through the FA inverter's `FUN_08015dcc` exposure path unchanged.
+- **`i_battery` at IR(51)** (Modbus TCP exposed to clients including GivTCP): **centi-amps (0.01 A)**. Computed independently by the FA inverter's secondary ARM (`FA_A2_03.bin`) by sampling PA0 (ADC1 channel 0) at 512-sample windows, computing true-RMS (sum-of-squares + integer sqrt + offset cal + 2.260 scale), then forwarding via USART1 (38400 baud) to the main ARM. Reports DC bus current (sum across all paralleled packs).
 
-When monitoring tools (e.g. GivTCP) display centi-amp current, they are reading IR(51), NOT HR23. Past confusion between the two has caused docs revisions to mis-label HR23's unit.
+Both fields are in the same wire unit (0.01 A); they differ in scope. HR23 is per-primary-pack from the BMS; IR(51) is total DC bus current from the inverter's own sensor. For a 2-pack balanced setup, expect HR23 ~ IR(51) / 2.
 
 #### FA inverter secondary ARM (`FA_A2_03.bin`)
 

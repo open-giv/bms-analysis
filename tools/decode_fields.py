@@ -30,7 +30,7 @@ def decode_hr_response(data: bytes) -> Dict[str, Any]:
       Reg 17 -> bytes 34-35: dynamic hash (uint16)
       Reg 19 -> bytes 38-39: composite status/fault bitmask (observed values
                               fit in 8 bits; read as uint16 per register model)
-      Reg 23 -> bytes 46-47: pack current in deciAmps (signed int16)
+      Reg 23 -> bytes 46-47: pack current in centi-amps (signed int16, 0.01 A)
       Reg 25 -> bytes 50-51: current limit * 100 (uint16)
     """
     if len(data) != 56:
@@ -39,7 +39,7 @@ def decode_hr_response(data: bytes) -> Dict[str, Any]:
         "hr11_soc_x100": _u16_be(data, 22),
         "hr17_dynamic": _u16_be(data, 34),
         "hr19_status": _u16_be(data, 38),
-        "hr23_pack_current_dA": _s16_be(data, 46),
+        "hr23_pack_current_cA": _s16_be(data, 46),
         "hr25_current_limit": _u16_be(data, 50),
     }
     return fields
