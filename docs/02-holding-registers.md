@@ -117,7 +117,14 @@ Each of HR19's source bytes was traced back to the firmware function that writes
 | 5 (normally low) | `*(u8*)0x2000009D` | `FUN_0801ED08` (clearer) + `FUN_0801151E` (setter) | **Any BMS protection flag active.** Setter-context analysis shows **only bit 1** of `0x2000009D` is ever set or cleared -- effectively a single boolean. Setters: `FUN_0801151E` (counter timeout `>= 100`) + `FUN_0801ED08` (AFE-flag-set path); both `ORR #0x02`. Clearer: `FUN_0801ED08` after recovery debouncing. The 8-bit iteration in `FUN_0801ED08` is over a DIFFERENT upstream event bitmap; the aggregated result lands in bit 1 of `0x2000009D`. HR19 bit 5 is set when source byte is non-zero -> "any protection active". Matches Ken's "normally low" observation. |
 | 6 (forbid charge?) | `*(u8*)0x20000141` | `compute_pack_current_limits` | **Discharge-vote consensus across packs.** Same logic as bit 3 with reversed polarity: state==2 increments, state==1 resets. Combined with bit 3, the pair encodes a 2-bit consensus mode (idle/charge/discharge/disagreement). |
 
-Bits 1/2 (charge/discharge direction encoding via IEEE-754 equality with zero on the float at `0x2000014C`) and bits 7/8 (sourced from `*(u8*)0x2000027B`, a voltage alarm bitmap populated by `pace_cid2_dispatch` from incoming PACE frames) still rely on Ken's behaviour observations for specific semantic naming.
+Bits 1/2 (charge/discharge direction encoding via IEEE-754 equality with zero on the float at `0x2000014C`) and bits 7/8 (sourced from `*(u8*)0x2000027B`) are populated by `pace_cid2_dispatch` from incoming PACE frames. **PACE injection in Unicorn confirms** two specific CID2 commands that set these bits:
+
+| CID2 | Sets in `0x2000027B` | -> HR19 bit (1-idx) | Ken's label |
+|---|---|---|---|
+| `0x9A` | bit 1 (val `0x02`) | bit 8 | "Allow Charge and Discharge?" |
+| `0x9B` | bit 2 (val `0x04`) | bit 7 | "Allow Discharge?" |
+
+So **CID2 = 0x9A is the AFE "Allow Charge and Discharge" state-set command**, and **CID2 = 0x9B is the AFE "Allow Discharge" state-set command**. Both commands first clear the current-alarm and temperature-alarm bitmaps (a state-transition reset), then OR their specific bit into the voltage-alarm byte. Bits 1/2 of HR19 still rely on Ken's behaviour observations for semantic naming.
 
 ### Register 20 Bits
 
