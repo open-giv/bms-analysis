@@ -69,22 +69,28 @@ ASCII view: `XXXXXXXXXX          ......................`
 | 0 | 1 | Number of cells | Hex digit; `0x10` = 16 cells |
 | 1 | 2 | Number of battery cycles | Big-endian uint16 (e.g. `0x02E1` = 737 cycles) |
 | 3 | 2 | (unknown / `0x0000`) | |
-| 5 | 2 | (unknown, varies) | Possibly a voltage in mV (e.g. `0xCD33` = 52.531 V if interpreted as 0.001 V scale) |
-| 7 | 2 | Pack voltage | Likely 0.001 V scale (e.g. `0xCF85` = 53.125 V) |
-| 9 | 6 | (unknown, mostly 0xFF / variable) | |
-| 15 | 2 | Battery capacity (calibrated) | 0.1 Ah units, big-endian (e.g. `0x4BC0` = 19392 = 1939.2 Ah... actually 193.92 Ah - see notes) |
+| 5 | 2 | possibly min pack voltage? | Possibly a voltage in mV (e.g. `0xCD33` = 52.531 V if interpreted as 0.001 V scale). Seems to track min cell voltage * 16, i.e. voltage pack would be if all cells had same voltage as min cell. |
+| 7 | 2 | possibly max pack voltage? | Likely 0.001 V scale (e.g. `0xCF85` = 53.125 V). Seems to track max cell voltage * 16, i.e. voltage pack would be if all cells had same voltage as max cell. |
+| 9 | 2 | (unknown, mostly 0xFF / variable). | Oscillates between 0x0000 and 0xFFFF.  Might be 0xFFFF during discharge, 0x0000 during charge? |
+| 11 | 2 | Pack current in mA | negative values = discharge, positive = charge (0.001A units) |
+| 13 | 2 | (unknown / `0x0000`) |
+| 15 | 2 | Battery capacity (calibrated) | 0.01 Ah units, big-endian (e.g. `0x4BC0` = 19392 = 193.92 Ah - see notes) |
 | 17 | 2 | (unknown / `0x0000`) | |
-| 19 | 2 | Design capacity | 0.1 Ah units (e.g. `0x48A8` = 18600 = 186.00 Ah) |
+| 19 | 2 | Design capacity | 0.01 Ah units (e.g. `0x48A8` = 18600 = 186.00 Ah) |
 | 21 | 2 | (unknown / `0x0000`) | |
-| 23 | 2 | Remaining capacity | 0.1 Ah units (e.g. `0x467B` = 18043 = 180.43 Ah) |
+| 23 | 2 | Remaining capacity | 0.01 Ah units (e.g. `0x467B` = 18043 = 180.43 Ah) |
 | 25 | 1 | State of Charge | Direct % (e.g. `0x5D` = 93%) |
 | 26 | 2 | (unknown / `0x0000`) | |
-| 28 | 2 | (unknown, often `0x0E10` = 3600) | Possibly a time-in-mode counter or rate constant |
-| 30 | 5 | (unknown, all zero) | Reserved |
+| 28 | 2 | Status (`0x0E10` = 3600) | Most likely a status bit-field. During calibration, Bit 10 changes at min SoC and max SoC.  Bit 11 changes at min SoC.  Bit 12 appears to indicate charge direction. |
+| 30 | 2 | Status | Normally zero, bit 13 goes high at min SoC during calibration. |
+| 32 | 2 | Status | Bit 1 may indicate over-voltage, bit 2 under-voltage (bit 2 set for prolonged period around min SoC during calibration), bits 9 & 10 briefly high at max SoC. |
+| 34 | 1 | (unknown) ||
 | 35 | 2 | BMS firmware version | E.g. `0x0BCE` = 3022 |
 | 37 | 1 | (unknown / `0x00`) | |
 
-> **Note**: capacity unit: Ken's [NOTES.md](../NOTES.md) initially documented these as mAh, then corrected to deci-Ah. So `0x48A8` = 18600 in raw units = **186.00 Ah** when interpreted as 0.1 Ah.
+> This block is not fully aligned.  It is unclear where the alignment changes between registers 25 - 35 (if it does).  It may be that fields should be at offsets 27, 29, 31, 33 in table above.
+
+> **Note**: capacity unit: Ken's [NOTES.md](../NOTES.md) initially documented these as mAh, then corrected to deci-Ah, should be centi-Ah. So `0x48A8` = 18600 in raw units = **186.00 Ah** when interpreted as 0.01 Ah.
 
 Example (device 1 in cold_start.log):
 
