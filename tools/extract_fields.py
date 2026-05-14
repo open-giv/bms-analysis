@@ -6,10 +6,12 @@ Handles GivEnergy's non-standard FC=4 response framing (start-address echo
 in place of byte_count). Tracks pending requests to determine FC=4 response
 length from the matching request's count.
 
-Usage:
-    python3 extract_fields.py [-g seconds] <log_path> [output.csv] [[w@|sw@|b@]device:fc:reg ...]
+    Usage:
+    python3 extract_fields.py [-g seconds] <log_path> [output.csv] [[w@|sw@|b@]device:fc:reg[+byte_offset] ...]
 
-    device, fc, reg are integers (decimal or 0x-prefixed hex).
+        device and fc are integers (decimal or 0x-prefixed hex).
+        reg is an integer (decimal or 0x-prefixed hex) and may optionally be
+        followed by +byte_offset, where byte_offset is a non-negative integer.
         Prefix each spec with:
             - w@  for 16-bit unsigned word output (default if omitted)
             - sw@ for 16-bit signed integer output
@@ -174,8 +176,40 @@ def pair_request_response(frames):
 
 
 def column_name(key):
-    device, fc, reg = key
-    return f"device_{device:03d}_fc_{fc:02d}_reg_{reg:05d}"
+    device, fc, reg = key[:3]
+    offset = key[3] if len(key) > 3 else 0
+    name = f"device_{device:03d}_fc_{fc:02d}_reg_{reg:05d}"
+    if offset:
+        name += f"_byte_{offset:03d}"
+    return name
+
+
+def _parse_register_component(part):
+    if part == "*":
+        return None, 0
+
+    if "+" in part:
+        reg_part, offset_part = part.split("+", 1)
+        if not reg_part or not offset_part:
+            raise ValueError(f"Invalid register component {part!r}")
+    else:
+        reg_part = part
+        offset_part = "0"
+
+    try:
+        reg = None if reg_part == "*" else int(reg_part, 0)
+    except ValueError:
+        raise ValueError(f"Invalid register value {reg_part!r}")
+
+    try:
+        offset = int(offset_part, 0)
+    except ValueError:
+        raise ValueError(f"Invalid byte offset {offset_part!r}")
+
+    if offset < 0:
+        raise ValueError(f"Byte offset must be >= 0, got {offset}")
+
+    return reg, offset
 
 
 def decode_pair_updates(req, rsp):
@@ -239,10 +273,10 @@ def parse_register_filter(specs):
     """Parse filter specs into a list of (mode, pattern) tuples.
 
     Each spec is one of:
-      - device:fc:reg
-      - w@device:fc:reg
-      - sw@device:fc:reg
-      - b@device:fc:reg
+    - device:fc:reg[+byte_offset]
+    - w@device:fc:reg[+byte_offset]
+    - sw@device:fc:reg[+byte_offset]
+    - b@device:fc:reg[+byte_offset]
 
     Each pattern component may be:
       - a decimal or 0x-prefixed hex integer, or
@@ -250,7 +284,7 @@ def parse_register_filter(specs):
 
     Returns a list of (mode, pattern) tuples where:
       - mode is 'w', 'sw', or 'b'
-      - pattern is a (device, fc, reg) tuple where None represents a wildcard.
+    - pattern is a (device, fc, reg, byte_offset) tuple where None represents a wildcard.
 
     Raises ValueError with a descriptive message on bad input.
     """
@@ -270,11 +304,11 @@ def parse_register_filter(specs):
         parts = body.split(":")
         if len(parts) != 3:
             raise ValueError(
-                f"Register spec must be [w@|b@]device:fc:reg, got {spec!r}"
+                f"Register spec must be [w@|sw@|b@]device:fc:reg[+byte_offset], got {spec!r}"
             )
 
         parsed = []
-        for label, part in zip(("device", "fc", "reg"), parts):
+        for label, part in zip(("device", "fc"), parts[:2]):
             if part == "*":
                 parsed.append(None)
             else:
@@ -284,6 +318,11 @@ def parse_register_filter(specs):
                     raise ValueError(
                         f"Component {label!r} in {spec!r} must be an integer or '*'"
                     )
+
+        reg, offset = _parse_register_component(parts[2])
+        parsed.append(reg)
+        parsed.append(offset)
+
         result.append((mode, tuple(parsed)))
 
     return result
@@ -292,9 +331,40 @@ def parse_register_filter(specs):
 def _key_matches_pattern(key, pattern):
     """Return True if key matches a single pattern.
 
-    Pattern is (device, fc, reg) where None is a wildcard.
+    Pattern is (device, fc, reg, byte_offset) where None is a wildcard.
     """
-    return all(p is None or p == k for p, k in zip(pattern, key))
+    return all(p is None or p == k for p, k in zip(pattern[:3], key))
+
+
+def _field_registers(field_key):
+    """Return the raw register keys required to materialize a field key."""
+    device, fc, reg, offset = field_key
+    start_reg = reg + (offset // 2)
+    end_reg = reg + ((offset + 1) // 2)
+    return [(device, fc, register) for register in range(start_reg, end_reg + 1)]
+
+
+def _field_byte(last_known, field_key, byte_offset):
+    """Return one byte from a field key, or None if the source register is missing."""
+    device, fc, reg, offset = field_key
+    absolute = offset + byte_offset
+    register = reg + (absolute // 2)
+    key = (device, fc, register)
+    value = last_known.get(key)
+    if value is None or value == "":
+        return None
+    if absolute % 2 == 0:
+        return (value >> 8) & 0xFF
+    return value & 0xFF
+
+
+def _field_word(last_known, field_key):
+    """Return a uint16 extracted from a field key, or None if incomplete."""
+    hi = _field_byte(last_known, field_key, 0)
+    lo = _field_byte(last_known, field_key, 1)
+    if hi is None or lo is None:
+        return None
+    return (hi << 8) | lo
 
 
 def _column_specs(all_keys, register_filter):
@@ -303,11 +373,14 @@ def _column_specs(all_keys, register_filter):
     Returns list of tuples:
       - ("w", key) for word columns
       - ("b", key, bit_index) for bit columns (bit 15 down to 0)
+
+    The key is a (device, fc, reg, byte_offset) tuple. For register-aligned
+    columns, byte_offset is 0.
     """
     sorted_keys = sorted(all_keys)
 
     if register_filter is None:
-        return [("w", key) for key in sorted_keys]
+        return [("w", key + (0,)) for key in sorted_keys]
 
     word_keys = set()
     signed_word_keys = set()
@@ -317,15 +390,19 @@ def _column_specs(all_keys, register_filter):
         for mode, pattern in register_filter:
             if not _key_matches_pattern(key, pattern):
                 continue
+            field_key = key + (pattern[3],)
+            needed_keys = _field_registers(field_key)
+            if any(required_key not in all_keys for required_key in needed_keys):
+                continue
             if mode == "b":
-                bit_keys.add(key)
+                bit_keys.add(field_key)
             elif mode == "sw":
-                signed_word_keys.add(key)
+                signed_word_keys.add(field_key)
             else:
-                word_keys.add(key)
+                word_keys.add(field_key)
 
     specs = []
-    for key in sorted_keys:
+    for key in sorted(word_keys | signed_word_keys | bit_keys):
         if key in word_keys:
             specs.append(("w", key))
         if key in signed_word_keys:
@@ -374,20 +451,22 @@ def write_register_state_csv(pairs, out, register_filter=None, min_gap_seconds=0
         bit_col_num = 0
         for spec in col_specs:
             if spec[0] == "w":
-                key = spec[1]
-                data_row.append(last_known.get(key, ""))
+                value = _field_word(last_known, spec[1])
+                if value is None:
+                    data_row.append("")
+                else:
+                    data_row.append(value)
             elif spec[0] == "sw":
-                key = spec[1]
-                value = last_known.get(key)
-                if value is None or value == "":
+                value = _field_word(last_known, spec[1])
+                if value is None:
                     data_row.append("")
                 else:
                     data_row.append(value if value < 0x8000 else value - 0x10000)
             else:
                 key = spec[1]
                 bit_index = spec[2]
-                value = last_known.get(key)
-                if value == "" or value is None:
+                value = _field_word(last_known, key)
+                if value is None:
                     data_row.append("")
                 else:
                     raw_bit = (value >> bit_index) & 1
@@ -440,7 +519,7 @@ def main(argv):
 
     if len(positional) < 1:
         print(
-            f"Usage: {argv[0]} [-g seconds] <log_path> [output.csv] [[w@|sw@|b@]device:fc:reg ...]",
+            f"Usage: {argv[0]} [-g seconds] <log_path> [output.csv] [[w@|sw@|b@]device:fc:reg[+byte_offset] ...]",
             file=sys.stderr,
         )
         return 2
