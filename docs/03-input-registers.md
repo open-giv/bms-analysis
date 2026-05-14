@@ -33,18 +33,18 @@ The inverter polls all five potential device addresses (1..5) regardless of how 
 
 42 bytes of payload. Layout (offsets are within the 42-byte data section, after the 4-byte response header):
 
-| Offset | Bytes | Field | Notes |
-|---:|---:|---|---|
-| 0 | 20 | Serial number (ASCII, padded with spaces, NUL-terminated) | e.g. `XXXXXXXXXX` followed by 9 spaces and a NUL |
-| 20 | 2 | (unknown / 0x0000) | Always observed as zero |
-| 22 | 2 | Temperature sensor 1 | 0.1 degC big-endian (e.g. `0x00AB` = 17.1 degC). See "Temperature encoding" note below. |
-| 24 | 2 | Temperature sensor 2 | 0.1 degC big-endian |
-| 26 | 2 | Temperature sensor 3 | 0.1 degC big-endian |
-| 28 | 2 | Temperature sensor 4 | 0.1 degC big-endian |
-| 30 | 2 | Temperature sensor 5 | 0.1 degC big-endian |
-| 32 | 2 | (unknown, observed `0x0001`) | Possibly a count or flag |
-| 34 | 2 | (unknown, observed `0x0008`) | Possibly USB / accessory presence flag |
-| 36 | 6 | (unknown, all zero) | Reserved / unused |
+| Reg | Offset | Bytes | Field | Notes |
+|---:|---:|---:|---|---|
+| 0 | 0 | 20 | Serial number (ASCII, padded with spaces, NUL-terminated) | e.g. `XXXXXXXXXX` followed by 9 spaces and a NUL |
+| 10 | 20 | 2 | (unknown / 0x0000) | Always observed as zero |
+| 11 | 22 | 2 | Cell Temp 1 | 0.1 degC big-endian (e.g. `0x00AB` = 17.1 degC). See "Temperature encoding" note below. |
+| 12 | 24 | 2 | Cell Temp 2 | 0.1 degC big-endian |
+| 13 | 26 | 2 | Cell Temp 3 | 0.1 degC big-endian |
+| 14 | 28 | 2 | Cell Temp 4 | 0.1 degC big-endian |
+| 15 | 30 | 2 | BMS Temp | 0.1 degC big-endian |
+| 16 | 32 | 2 | (unknown, observed `0x0001`) | Possibly a count or flag |
+| 17 | 34 | 2 | (unknown, observed `0x0008`) | Possibly USB / accessory presence flag |
+| 18 | 36 | 6 | (unknown, all zero) | Reserved / unused |
 
 > **Temperature encoding**: the BMS firmware applies `subw r1, r1, #0xAAA` (i.e. subtract 2730) to each of the 5 temperature halfwords just before writing them to the TX buffer (flash addresses 0x0800_DF8C, 0x0800_DF98, 0x0800_DFA4, 0x0800_DFB0, 0x0800_DFBC). Internally the values are stored as `(decidegC + 2730)` - a positive-offset representation. The subw removes the bias before TX, so the **wire bytes are raw decidegC**, signed (negative temperatures will appear as 2's-complement int16). No decoder transform needed. The "absent device" `0xF556` sentinel is a natural side effect of the same encoding (see absent-device section).
 
@@ -99,13 +99,13 @@ a8 00 00 46 7b 5d 00 00 0e 10 00 00 00 00 00 0b ce 00
 
 > **Note on count**: This firmware variant requests **count = 20** (`0x14`) registers. Some early documentation suggested 21 - that was a misread. Both empirical wire captures and inverter firmware static analysis confirm count=20.
 
-| Offset | Bytes | Field | Notes |
-|---:|---:|---|---|
-| 0 | 32 | 16 cell voltages | Each cell = 2 bytes big-endian, **raw mV**, no offset. E.g. `0x0D07` = 3335 mV. |
-| 32 | 2 | unknown, **`(value - 2730)` encoded** | Wire shows `value - 2730`; decoder must add 2730 to get user value. Decoded values 2880-2910 mV in observed captures. Probably balancing threshold / per-cell extreme tracker - semantic still unconfirmed. |
-| 34 | 2 | unknown, **`(value - 2730)` encoded** | Same encoding as offset 32. |
-| 36 | 2 | Max cell voltage | Raw mV. `0x0D09` = 3337 mV (slightly higher than highest individual cell). |
-| 38 | 2 | Min cell voltage | Raw mV. `0x0D05` = 3333 mV. |
+| Reg | Offset | Bytes | Field | Notes |
+|--:|---:|---:|---|---|
+| 40 | 0 | 32 | 16 cell voltages | Each cell = 2 bytes big-endian, **raw mV**, no offset. E.g. `0x0D07` = 3335 mV. |
+| 56 | 32 | 2 | Max cell temp | Tracks very closely to the max temp in block 1 |
+| 57 | 34 | 2 | Min cell temp | Tracks very closely to the min temp in block 1 |
+| 58 | 36 | 2 | Max cell voltage | Raw mV. `0x0D09` = 3337 mV (slightly higher than highest individual cell). |
+| 59 | 38 | 2 | Min cell voltage | Raw mV. `0x0D05` = 3333 mV. |
 
 > **Cell voltage encoding** (per-cell): cell voltages at offsets 0..31 are **raw millivolts** big-endian, 2 bytes per cell, no offset. The 16-cell loop in the FC=4 handler at flash `0x0800_E0A0..0x0800_E0BE` writes them directly without applying any bias.
 >
