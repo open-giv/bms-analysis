@@ -126,7 +126,7 @@ A316 contains **three** Modbus controller code paths on USART2:
 
 #### A316 BMS-channel polling expanded (audit, 2026-05)
 
-A deeper look at A316's USART2 state machine identified the complete poll sequence. The relevant state machine at flash `0x0802B028` cycles through 17 different FC=4 IR windows (each 2 registers, slave 1):
+A deeper look at A316's USART2 state machine identified the complete poll sequence. The relevant state machine at flash `0x0802B028` cycles through 17 different FC=4 IR windows (each 2 registers, device 1):
 
 | State | IR Start | Regs read |
 |---|---|---|

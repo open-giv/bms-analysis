@@ -80,11 +80,11 @@ ASCII view: `XXXXXXXXXX          ......................`
 | 21 | 2 | (unknown / `0x0000`) | |
 | 23 | 2 | Remaining capacity | 0.01 Ah units (e.g. `0x467B` = 18043 = 180.43 Ah) |
 | 25 | 1 | State of Charge | Direct % (e.g. `0x5D` = 93%) |
-| 26 | 2 | (unknown / `0x0000`) | |
-| 28 | 2 | Status (`0x0E10` = 3600) | Most likely a status bit-field. During calibration, Bit 10 changes at min SoC and max SoC.  Bit 11 changes at min SoC.  Bit 12 appears to indicate charge direction. |
-| 30 | 2 | Status | Normally zero, bit 13 goes high at min SoC during calibration. |
-| 32 | 2 | Status | Bit 1 may indicate over-voltage, bit 2 under-voltage (bit 2 set for prolonged period around min SoC during calibration), bits 9 & 10 briefly high at max SoC. |
-| 34 | 1 | (unknown) ||
+| 26 | 1 | (unknown / `0x00`) | Possibly unused, possibly 2nd byte of offset 25? |
+| 27 | 2 | Status | Most likely a status bit-field. During calibration, Bit 2 changes at min SoC and max SoC.  Bit 3 changes at min SoC.  Bit 4 appears to indicate charge direction. |
+| 29 | 2 | Status | Normally zero, bit 5 goes high at min SoC during calibration. |
+| 31 | 2 | Status | Bit 1&2 briefly high at max SoC during calibration. |
+| 33 | 2 | Status | Bit 9 briefly high at max SoC during calibration, bit 10 high for prolonged duration at min SoC. |
 | 35 | 2 | BMS firmware version | E.g. `0x0BCE` = 3022 |
 | 37 | 1 | (unknown / `0x00`) | |
 
@@ -169,7 +169,7 @@ The wire-byte layouts above were originally derived from Ken's wire captures. Th
 
 ### Per-pack struct
 
-Each pack slot is **145 bytes (`0x91`)** at SRAM `0x20003D6A + slot * 145`, where `slot = min((slave - 1) & 0xff, 6)`. The clamp-to-6 allows slave addresses >= 7 to read from the 7th 145-byte slot beyond the documented 6 packs - an off-by-one quirk of the bounds check at flash `0x0801DF50`. Slaves 1..6 map to slots 0..5 cleanly.
+Each pack slot is **145 bytes (`0x91`)** at SRAM `0x20003D6A + slot * 145`, where `slot = min((device - 1) & 0xff, 6)`. The clamp-to-6 allows device addresses >= 7 to read from the 7th 145-byte slot beyond the documented 6 packs - an off-by-one quirk of the bounds check at flash `0x0801DF50`. Devices 1..6 map to slots 0..5 cleanly.
 
 ### Storage rule
 
@@ -225,11 +225,11 @@ The handler rejects requests where:
 - `count == 0` or `count > 60` (0x3C)
 - `start + count` would cross a 60-register block boundary
 
-A request that fails validation produces a Modbus exception response (`slave | 0x84 | CRC`). All three documented blocks (0/21, 0x15/19, 0x28/20) fall inside their respective 60-byte sub-block, so legitimate inverter polls always pass.
+A request that fails validation produces a Modbus exception response (`device | 0x84 | CRC`). All three documented blocks (0/21, 0x15/19, 0x28/20) fall inside their respective 60-byte sub-block, so legitimate inverter polls always pass.
 
 ### Methodology
 
-Confirmed by driving the BMS firmware's FC=4 handler (`fc4_handler` at flash `0x0801DEBC`) directly under Unicorn Engine. For each block, the per-pack struct was pre-populated with distinctive markers at every byte position, the handler was invoked with R0 = RX-frame pointer (0x2000385C) and R1 = FC byte (4), and the resulting TX-buffer bytes at 0x200038C0 were compared against expected marker positions. The handler's slot-index logic was independently verified by populating multiple slots with different markers and varying the slave byte in the RX frame.
+Confirmed by driving the BMS firmware's FC=4 handler (`fc4_handler` at flash `0x0801DEBC`) directly under Unicorn Engine. For each block, the per-pack struct was pre-populated with distinctive markers at every byte position, the handler was invoked with R0 = RX-frame pointer (0x2000385C) and R1 = FC byte (4), and the resulting TX-buffer bytes at 0x200038C0 were compared against expected marker positions. The handler's slot-index logic was independently verified by populating multiple slots with different markers and varying the device byte in the RX frame.
 
 The fc4_handler entry address corrected an earlier off-by-4 noted in the working notes (`0x0801DEB8` -> `0x0801DEBC`); calling at the older address landed inside the preceding function and produced an empty addr-echo response with no body data.
 
