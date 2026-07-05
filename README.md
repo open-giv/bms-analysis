@@ -31,6 +31,7 @@ The original empirical analysis - hardware setup, RS485 captures, raw hex traces
 | [docs/07-emulator-implications.md](docs/07-emulator-implications.md) | **Goal 1** - Emulator implementation (3rd-party battery -> GivEnergy inverter) |
 | [docs/08-bridge-implementation.md](docs/08-bridge-implementation.md) | **Goal 2** - Bridge implementation (GivEnergy battery -> 3rd-party inverter) |
 | [docs/09-pace-comparison.md](docs/09-pace-comparison.md) | Field-by-field comparison between the GivEnergy Modbus layout and PACE / Pylontech - useful background for both goals |
+| [docs/10-pace-bms-tools.md](docs/10-pace-bms-tools.md) | Guide on accessing the PACE BMS directly |
 
 ## Tools
 
