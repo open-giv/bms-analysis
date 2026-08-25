@@ -20,7 +20,7 @@ def load_wire_records(wire_path: Path) -> pd.DataFrame:
     rows = []
     for req, rsp in pairs:
         row = {
-            "ts": pd.Timestamp(rsp["ts"]),
+            "ts": pd.Timestamp(rsp["ts"], tz="UTC"),
             "device": rsp["device"],
             "fc": rsp["fc"],
             "addr": (req["raw"][2] << 8) | req["raw"][3],
@@ -44,7 +44,7 @@ def load_tcp_records(tcp_path: Path) -> pd.DataFrame:
                 rec = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            row = {"ts": pd.Timestamp(rec["ts"])}
+            row = {"ts": pd.Timestamp(rec["ts"], tz="UTC")}
             for k, v in rec.get("fields", {}).items():
                 row[f"tcp_{k}"] = v
             rows.append(row)
