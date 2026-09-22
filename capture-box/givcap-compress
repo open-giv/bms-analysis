@@ -1,0 +1,18 @@
+#!/bin/bash
+# Gzip capture files from UTC days before today. Run daily by givcap-compress.timer.
+# CAPTURES_DIR and TODAY can be overridden (used by the tests).
+set -euo pipefail
+
+CAPTURES_DIR="${CAPTURES_DIR:-$HOME/captures}"
+TODAY="${TODAY:-$(date -u +%Y-%m-%d)}"
+
+shopt -s nullglob
+for dir in "$CAPTURES_DIR"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/; do
+    day="$(basename "$dir")"
+    [[ "$day" < "$TODAY" ]] || continue
+    for file in "$dir"*; do
+        [[ -f "$file" && "$file" != *.gz ]] || continue
+        # -f replaces a partial .gz left by a power cut during an earlier run.
+        gzip -f "$file"
+    done
+done
