@@ -39,7 +39,7 @@ Keep raw captures out of git. They contain your battery and inverter serial numb
 
 ## Map GivTCP topics to poller names
 
-`tools/mqtt_logger.py` writes unmapped topics under snake_case names from the topic path. To give the main values the same names that `tools/tcp_poller.py` uses, so that the analysis notebook works unchanged, record a sample and fill in `TOPIC_TO_FIELD`:
+`tools/mqtt_logger.py` writes unmapped topics under names made from the topic path, with each `/` or other symbol replaced by `_` and the case kept. To give the main values the same names that `tools/tcp_poller.py` uses, so that the analysis notebook works unchanged, record a sample and fill in `TOPIC_TO_FIELD`:
 
 ```
 mosquitto_sub -h BROKER -u USER -P PASSWORD -t 'PREFIX/#' -v -W 120 > givtcp_sample.txt
