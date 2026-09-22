@@ -81,9 +81,9 @@ Driven by the inverter:
 | Query | Cadence | Response size |
 |---|---|---:|
 | HR poll (device 1 only) | every ~245 ms (range 231-481 ms) | 61 bytes |
-| IR Block 1 (per device) | once per ~12 s rotation cycle | 48 bytes |
-| IR Block 2 (per device) | once per ~12 s rotation cycle | 44 bytes |
-| IR Block 3 (per device) | once per ~12 s rotation cycle | 46 bytes |
+| IR Block 1 (per device) | about every 10.5 s on a G3 | 48 bytes |
+| IR Block 2 (per device) | about every 200 s on a G3 | 44 bytes |
+| IR Block 3 (per device) | about every 200 s on a G3 | 46 bytes |
 | FC=06 mode-change writes | event-driven (charge enable, BMS reset, force-charge); not steady-state | 8 bytes echo |
 
 The inverter waits for response completion before issuing the next query, so there's no bus contention for the emulator to handle.
@@ -163,7 +163,8 @@ FF FF FF 35 00 00                  ; mostly fixed pattern
 
 ```
 [16 x 2-byte BE cell voltages, raw mV]   ; 32 bytes total. 3.30 V cell = 0x0CE4
-00 B3 00 A5                              ; cell-level diagnostics (varies)
+[2-byte BE max temperature, 0.1 degC]    ; e.g. 00 B3 = 17.9 degC
+[2-byte BE min temperature, 0.1 degC]    ; e.g. 00 A5 = 16.5 degC
 [2-byte BE max cell voltage mV]
 [2-byte BE min cell voltage mV]
 ```
@@ -190,4 +191,6 @@ When the dongle / real inverter is available, end-to-end testing is straightforw
 
 4. **Forgetting to echo FC=06 writes** - the inverter retries indefinitely on a missing FC=06 ACK. This stalls the bus and HR/IR polling resumes only after the FC=06 retry exits.
 
-5. **Slow CRC implementation** - if you use a bit-shift CRC for every response, double-check your latency. A 56-byte HR response means CRCing ~58 bytes 4 times per second; cheap on a Pi, marginal on small AVRs. Use the table-based implementation for deterministic timing.
+5. **Treating the SoC in IR Block 2 as display only** - the inverter stops discharging when this SoC reaches its 4% floor. If an emulator passes through a third-party battery's SoC, that value decides how deeply the battery is discharged. Scale it if 4% on the inverter should leave a margin above the battery's own cut-off. The inverter reads Block 2 only about every 200 s, so SoC can drop about 2% between reads under heavy discharge. See [06-wire-captures.md](06-wire-captures.md#discharge-stops-at-the-4-soc-floor).
+
+6. **Slow CRC implementation** - if you use a bit-shift CRC for every response, double-check your latency. A 56-byte HR response means CRCing ~58 bytes 4 times per second; cheap on a Pi, marginal on small AVRs. Use the table-based implementation for deterministic timing.

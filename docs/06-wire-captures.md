@@ -109,6 +109,58 @@ There's no special boot probe or handshake - the inverter just immediately begin
 
 Ken's setup has 2 batteries (devices 1 and 2). The inverter still polls devices 3, 4, 5 - and gets back specific empty-but-valid responses. See [03-input-registers.md](03-input-registers.md) for the byte-level pattern.
 
+## Findings from a 66-hour G3 capture
+
+@af987 captured a GivEnergy G3 Hybrid 3.6 kW inverter with one 9.5 kWh battery (PR #14). The capture ran from 21 to 25 August 2026, about 66 hours, and covers 1.35 million request and response pairs. It includes the RS485 wire stream and a 1 Hz `tcp_poller.py` stream from the same system, joined with `tools/join_streams.py`.
+
+### Timestamp alignment
+
+The wire timestamps in this capture are local time (BST) that was labelled as UTC, so the wire stream is one hour ahead of the TCP stream. Before the correction, HR23 and the inverter's reported battery current correlate at 0.47. After moving the wire stream back one hour, they correlate at 0.997, with a median difference of 0.17 A. All the results below use the corrected alignment. The logger now writes UTC, and `join_streams.py --wire-tz` handles older logs, so new captures don't have this problem.
+
+### Poll cadence on a G3
+
+| Query | Interval per device |
+|---|---|
+| HR poll (device 1, FC=3, start 0, count 28) | 240 ms, with occasional gaps of 480 ms |
+| IR Block 1 (FC=4, start 0x0000, count 21) | about 10.5 s |
+| IR Block 2 (FC=4, start 0x0015, count 19) | about 200 s |
+| IR Block 3 (FC=4, start 0x0028, count 20) | about 200 s |
+
+The inverter polls devices 2 to 5 as well, and with one battery fitted those slots return the absent-device pattern.
+
+### The inverter reports the BMS values unchanged
+
+Every battery value that the inverter publishes over Modbus TCP matches a value on the wire exactly, once you allow for a delay of 10 to 20 seconds between the wire read and the TCP value:
+
+| TCP field (`tcp_poller.py`) | Wire source | Match after 20 s |
+|---|---|---|
+| `soc` | IR Block 2, SoC byte | 100% |
+| `num_cycles` | IR Block 2, cycle count | 100% |
+| `cap_remaining` | IR Block 2, remaining capacity | 100% |
+| `v_cell_01` to `v_cell_16` | IR Block 3, cell voltages | 100% |
+| `t_max` | IR Block 3, offset 32 (0.1 °C) | 100% |
+| `t_min` | IR Block 3, offset 34 (0.1 °C) | 100% |
+| battery current (`p_battery / v_battery`) | HR23 (0.01 A) | correlation 0.997 |
+
+So an emulator controls what the inverter and the GivEnergy app show by setting these registers. The five temperatures in IR Block 1 are separate sensors. They don't feed `t_max` or `t_min`.
+
+### Values that stayed fixed
+
+- **HR11** stayed at 186 for the whole capture while SoC moved between 4% and 95%. 186 Ah at 51.2 V is 9.5 kWh, the size of this battery. HR11 behaves as the capacity of the batteries online, not the remaining charge. See [02-holding-registers.md](02-holding-registers.md).
+- **HR25** stayed at 15000 (150 A).
+- The inverter's charge and discharge limits over TCP changed once, from 38% to 50%, at 22:55 UTC on 23 August. The BMS registers didn't change at that moment, so the change came from an inverter setting.
+- The largest currents were 65 A charging and 76 A discharging. On a 3.6 kW inverter these fit the inverter's own power limit.
+
+### Discharge stops at the 4% SoC floor
+
+GivEnergy inverters stop discharging at 4% SoC. Discharge stopped twice in this capture, at 18:20 UTC on 21 August and at 17:59 UTC on 24 August. The last SoC readings from IR Block 2 before each stop were 9, 7, 5% and 10, 8, 5%, falling about 2% per 200 s reading. So SoC reached 4% between the last reading and the stop. The inverter uses the SoC that the BMS sends in IR Block 2 to decide when to stop.
+
+At the same poll that the current dropped to zero, HR19 bit 3 (0-indexed) started switching between set and clear on almost every poll. HR19 moved between 206 and 198, or between 207 and 199. The lowest cell was then between 2966 and 3039 mV. The switching continued until the battery next charged, about 8 hours later on 21 August and about 70 minutes later on 24 August. During normal discharge HR19 was always 207. The switching started after the stop, not before, so it doesn't look like the reason the inverter stopped. It matches Ken's note that bit 4 (1-indexed) "oscillates below 4% SOC".
+
+### Gaps in this capture
+
+The joined parquet file doesn't include HR20, HR21, HR22, HR24, HR26 or HR27, so this capture can't show how they behave. The raw wire log is needed for those.
+
 ## Capture experiments worth running
 
 To resolve remaining open questions, useful targeted captures would be:
