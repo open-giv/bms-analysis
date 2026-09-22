@@ -5,7 +5,7 @@ A Raspberry Pi that sits next to a GivEnergy inverter and records, around the cl
 - every byte on the inverter's BMS RS485 bus, via a USB RS485 dongle wired as a passive tap (`wire.log`)
 - GivTCP's view of the inverter and battery, from its MQTT output (`tcp.ndjson`)
 
-The box only listens. It never transmits on the RS485 bus and never polls the inverter. Design: [docs/superpowers/specs/2026-09-22-capture-box-design.md](../docs/superpowers/specs/2026-09-22-capture-box-design.md).
+The box only listens. It never transmits on the RS485 bus and never polls the inverter.
 
 Captures land in `~/captures/YYYY-MM-DD/` on the Pi, one folder per UTC day. Finished days are compressed at 00:30 UTC.
 
