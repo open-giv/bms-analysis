@@ -36,16 +36,26 @@ REQUIRED_ENV = ("MQTT_HOST", "MQTT_USER", "MQTT_PASSWORD", "MQTT_TOPIC_PREFIX")
 
 
 def field_name(topic: str, prefix: str) -> str:
-    """Column name for a topic: the poller's name if mapped, else snake_case of the path."""
+    """Column name for a topic: the poller's name if mapped, else the path joined with underscores.
+
+    Case is kept, because topics can contain serial numbers and redact.py
+    matches serials case-sensitively.
+    """
     rest = topic[len(prefix):].lstrip("/") if topic.startswith(prefix + "/") else topic
     if rest in TOPIC_TO_FIELD:
         return TOPIC_TO_FIELD[rest]
-    return re.sub(r"[^0-9A-Za-z]+", "_", rest).strip("_").lower()
+    return re.sub(r"[^0-9A-Za-z]+", "_", rest).strip("_")
 
 
 def parse_payload(payload: bytes):
-    """int or finite float if the payload is a number, else the stripped text."""
+    """int or finite float for a number, None for empty or non-finite, else the stripped text.
+
+    None (JSON null) rather than text for nan/inf/empty keeps numeric topics
+    numeric, so join_streams can write them to parquet.
+    """
     text = payload.decode("utf-8", errors="replace").strip()
+    if not text:
+        return None
     try:
         return int(text)
     except ValueError:
@@ -54,7 +64,7 @@ def parse_payload(payload: bytes):
         value = float(text)
     except ValueError:
         return text
-    return value if math.isfinite(value) else text
+    return value if math.isfinite(value) else None
 
 
 class SnapshotWriter:

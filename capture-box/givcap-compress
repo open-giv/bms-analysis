@@ -7,12 +7,22 @@ CAPTURES_DIR="${CAPTURES_DIR:-$HOME/captures}"
 TODAY="${TODAY:-$(date -u +%Y-%m-%d)}"
 
 shopt -s nullglob
+compressed=()
 for dir in "$CAPTURES_DIR"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/; do
     day="$(basename "$dir")"
     [[ "$day" < "$TODAY" ]] || continue
     for file in "$dir"*; do
         [[ -f "$file" && "$file" != *.gz ]] || continue
         # -f replaces a partial .gz left by a power cut during an earlier run.
-        gzip -f "$file"
+        # -k keeps the source until the .gz is safely on disk (see below).
+        gzip -kf "$file"
+        compressed+=("$file")
     done
 done
+
+# Only delete the sources once the compressed copies are on disk, so a power
+# cut straight after this run can't leave an empty .gz and no source.
+if (( ${#compressed[@]} )); then
+    sync
+    rm -f -- "${compressed[@]}"
+fi

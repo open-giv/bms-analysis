@@ -21,26 +21,32 @@ def test_field_name_uses_poller_name_for_mapped_topic(monkeypatch):
     assert field_name(f"{PREFIX}/Battery_Details/SOC", PREFIX) == "soc"
 
 
-def test_field_name_derives_snake_case_for_unmapped_topic():
-    assert field_name(f"{PREFIX}/Power/Power/Battery_Power", PREFIX) == "power_power_battery_power"
+def test_field_name_joins_unmapped_topic_path_with_underscores():
+    assert field_name(f"{PREFIX}/Power/Power/Battery_Power", PREFIX) == "Power_Power_Battery_Power"
 
 
 def test_field_name_keeps_whole_topic_when_prefix_differs():
-    assert field_name("other/Thing-One", PREFIX) == "other_thing_one"
+    assert field_name("other/Thing-One", PREFIX) == "other_Thing_One"
+
+
+def test_field_name_keeps_serial_case_so_redact_matches():
+    # redact.py replaces serials case-sensitively; lower-casing would hide them from it.
+    assert field_name(f"{PREFIX}/Battery_Details/BG1234G567/SOC", PREFIX) == "Battery_Details_BG1234G567_SOC"
 
 
 def test_parse_payload_numbers_and_text():
     assert parse_payload(b"42") == 42
     assert parse_payload(b" 51.2 ") == 51.2
     assert parse_payload(b"Normal") == "Normal"
-    assert parse_payload(b"") == ""
     assert parse_payload(b'{"a": 1}') == '{"a": 1}'
 
 
-def test_parse_payload_keeps_non_finite_as_text():
-    assert parse_payload(b"nan") == "nan"
-    assert parse_payload(b"inf") == "inf"
-    assert parse_payload(b"-Infinity") == "-Infinity"
+def test_parse_payload_empty_and_non_finite_are_null():
+    assert parse_payload(b"") is None
+    assert parse_payload(b"  ") is None
+    assert parse_payload(b"nan") is None
+    assert parse_payload(b"inf") is None
+    assert parse_payload(b"-Infinity") is None
 
 
 def test_writer_writes_full_snapshot(tmp_path):
@@ -119,3 +125,18 @@ def test_load_config_names_every_missing_variable():
     msg = str(exc.value)
     for name in ("MQTT_USER", "MQTT_PASSWORD", "MQTT_TOPIC_PREFIX"):
         assert name in msg
+
+
+def test_join_streams_survives_mixed_type_tcp_column(tmp_path):
+    import pandas as pd
+    from tools.join_streams import join_streams
+    tcp_path = tmp_path / "tcp.ndjson"
+    lines = [{"ts": "2026-09-24T12:00:00+00:00", "fields": {"soc": 50, "mode": "Eco"}},
+             {"ts": "2026-09-24T12:00:01+00:00", "fields": {"soc": "unknown", "mode": "Eco"}},
+             {"ts": "2026-09-24T12:00:02+00:00", "fields": {"soc": 51, "mode": "Timed"}}]
+    tcp_path.write_text("".join(json.dumps(r) + "\n" for r in lines))
+    tcp = load_tcp_records(tcp_path)
+    assert tcp["tcp_soc"].tolist()[0] == 50 and pd.isna(tcp["tcp_soc"].tolist()[1])
+    assert tcp["tcp_mode"].tolist() == ["Eco", "Eco", "Timed"]
+    wire = pd.DataFrame([{"ts": pd.Timestamp("2026-09-24 12:00:01.5", tz="UTC"), "fc": 3}])
+    join_streams(wire, tcp, pd.DataFrame()).to_parquet(tmp_path / "joined.parquet")

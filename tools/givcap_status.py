@@ -35,20 +35,31 @@ def _parse_line_time(line: str) -> datetime | None:
 
 
 def last_line_time(path: Path) -> datetime | None:
-    """Timestamp of the last complete, parseable line in a wire.log or tcp.ndjson file."""
+    """Timestamp of the last complete, parseable line in a wire.log or tcp.ndjson file.
+
+    Reads backwards from the end in growing windows, because one tcp.ndjson
+    snapshot line can be longer than any fixed window.
+    """
     try:
         with open(path, "rb") as f:
             f.seek(0, 2)
             size = f.tell()
-            f.seek(max(0, size - TAIL_BYTES))
-            tail = f.read().decode("utf-8", errors="replace")
+            window = TAIL_BYTES
+            while True:
+                start = max(0, size - window)
+                f.seek(start)
+                lines = f.read().decode("utf-8", errors="replace").splitlines()
+                if start > 0:
+                    lines = lines[1:]  # the first line in the window may be cut off
+                for line in reversed(lines):
+                    ts = _parse_line_time(line)
+                    if ts is not None:
+                        return ts
+                if start == 0:
+                    return None
+                window *= 4
     except FileNotFoundError:
         return None
-    for line in reversed(tail.splitlines()):
-        ts = _parse_line_time(line)
-        if ts is not None:
-            return ts
-    return None
 
 
 def report(captures_dir: Path, now: datetime, services: dict[str, str],
@@ -56,9 +67,12 @@ def report(captures_dir: Path, now: datetime, services: dict[str, str],
     day = now.strftime("%Y-%m-%d")
     lines = [f"{name}: {state}" for name, state in services.items()]
     for filename in ("wire.log", "tcp.ndjson"):
-        ts = last_line_time(captures_dir / day / filename)
-        if ts is None:
+        path = captures_dir / day / filename
+        ts = last_line_time(path)
+        if ts is None and not path.exists():
             lines.append(f"{filename}: no file yet for {day}")
+        elif ts is None:
+            lines.append(f"{filename}: exists but no readable timestamp")
         else:
             age = int((now - ts).total_seconds())
             lines.append(f"{filename}: last line {ts:%Y-%m-%d %H:%M:%S} UTC ({age} s ago)")

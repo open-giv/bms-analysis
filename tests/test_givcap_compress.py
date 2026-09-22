@@ -54,3 +54,19 @@ def test_compress_ignores_non_date_folders(tmp_path):
 
 def test_compress_handles_empty_captures_dir(tmp_path):
     _run(tmp_path, "2026-09-24")
+
+
+def test_compress_syncs_gz_to_disk_before_removing_source(tmp_path):
+    captures = tmp_path / "captures"
+    old = _day(captures, "2026-09-23")
+    fakebin = tmp_path / "bin"
+    fakebin.mkdir()
+    marker = tmp_path / "sources_at_sync.txt"
+    (fakebin / "sync").write_text(f"#!/bin/bash\nls {old} >> {marker}\n")
+    (fakebin / "sync").chmod(0o755)
+    subprocess.run(["bash", str(SCRIPT)], check=True,
+                   env={"CAPTURES_DIR": str(captures), "TODAY": "2026-09-24",
+                        "PATH": f"{fakebin}:/usr/bin:/bin"})
+    at_sync = marker.read_text().split()
+    assert "wire.log" in at_sync and "wire.log.gz" in at_sync  # both present when sync ran
+    assert sorted(p.name for p in old.iterdir()) == ["tcp.ndjson.gz", "wire.log.gz"]

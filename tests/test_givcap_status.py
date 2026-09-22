@@ -64,3 +64,19 @@ def test_report_handles_missing_files(tmp_path):
     assert "wire.log: no file yet for 2026-09-24" in text
     assert "tcp.ndjson: no file yet for 2026-09-24" in text
     assert "clock synchronised: no" in text
+
+
+def test_last_line_time_finds_line_longer_than_tail_window(tmp_path):
+    p = tmp_path / "tcp.ndjson"
+    fields = {f"topic_{i:04d}": 1234.5 for i in range(1500)}  # ~30 KB line
+    p.write_text(json.dumps({"ts": "2026-09-24T12:00:20+00:00", "fields": fields}) + "\n")
+    assert last_line_time(p) == datetime(2026, 9, 24, 12, 0, 20, tzinfo=timezone.utc)
+
+
+def test_report_distinguishes_unreadable_from_missing(tmp_path):
+    d = tmp_path / "2026-09-24"
+    d.mkdir()
+    (d / "wire.log").write_text("garbage without a timestamp\n")
+    text = "\n".join(report(tmp_path, NOW, SERVICES, free_bytes=20 * 10**9, clock_synced="yes"))
+    assert "wire.log: exists but no readable timestamp" in text
+    assert "tcp.ndjson: no file yet for 2026-09-24" in text
