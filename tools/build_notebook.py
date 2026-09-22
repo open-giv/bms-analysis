@@ -73,27 +73,29 @@ def build():
     ))
 
     cells.append(_md(
-        "## A. Reg 11 (`SoC * 100`) -- what does it actually track?\n\n"
-        "**PACE hypothesis (test first):** main pack SoC, scaled by 100. PACE clients "
-        "compute SoC as `REMAIN_CAP / TOTAL_CAP * 100`; reg 11 might be that value times 100.\n\n"
-        "**Fall-through:** if reg 11 does not track main SoC, look for per-cell SoC, "
-        "cycle-life percent, or a stale field.\n"
+        "## A. Reg 11 (`hr11_capacity_Ah`) -- installed capacity?\n\n"
+        "**Current reading:** HR11 is the capacity of the batteries online, in whole Ah. "
+        "In a 66-hour G3 capture it stayed at 186 (one 9.5 kWh pack) while SoC moved "
+        "between 4% and 95%. See `docs/06-wire-captures.md`.\n\n"
+        "**Check:** HR11 should equal the IR Block 2 design capacity (`design_cap_cAh / 100`) "
+        "times the number of packs online, and should not move with SoC.\n"
     ))
     cells.append(_code(
-        "# PACE hypothesis: reg 11 == main pack SoC * 100\n"
-        "if 'tcp_soc' in df.columns and 'hr11_soc_x100' in df.columns:\n"
-        "    fig, ax = plt.subplots(figsize=(8, 8))\n"
-        "    ax.scatter(df['tcp_soc'] * 100, df['hr11_soc_x100'], s=4, alpha=0.4)\n"
-        "    lim = [0, 10000]; ax.plot(lim, lim, 'r--', alpha=0.5)\n"
-        "    ax.set_xlabel('TCP SoC * 100'); ax.set_ylabel('HR reg 11')\n"
-        "    ax.set_title('PACE hypothesis: reg 11 == main pack SoC * 100')\n"
+        "# Check: HR11 is fixed and equals design capacity x packs online\n"
+        "if {'hr11_capacity_Ah', 'design_cap_cAh', 'device'}.issubset(df.columns):\n"
+        "    packs = df.loc[df['design_cap_cAh'] > 0, 'device'].nunique()\n"
+        "    design_ah = df.loc[df['device'] == 1, 'design_cap_cAh'].dropna().median() / 100\n"
+        "    print('HR11 values seen:', sorted(df['hr11_capacity_Ah'].dropna().unique()))\n"
+        "    print(f'Design capacity {design_ah:.0f} Ah x {packs} pack(s) = {design_ah * packs:.0f} Ah')\n"
         "else:\n"
-        "    print('Required columns missing; cannot evaluate PACE hypothesis')\n"
+        "    print('Required columns missing; cannot check HR11')\n"
     ))
     cells.append(_code(
-        "# Fall-through: characterise reg 11's variation if it does not track main SoC.\n"
-        "# Look at correlation against pack current, individual cell voltages, etc.\n"
-        "df[['hr11_soc_x100']].describe()\n"
+        "# Fall-through: if HR11 changes, plot it to see what it follows.\n"
+        "if 'hr11_capacity_Ah' in df.columns and df['hr11_capacity_Ah'].nunique() > 1:\n"
+        "    fig, ax = plt.subplots(figsize=(12, 4))\n"
+        "    ax.plot(df['ts'], df['hr11_capacity_Ah'], label='HR11 (Ah)')\n"
+        "    ax.set_ylabel('Ah'); ax.legend(); ax.grid(True, alpha=0.3)\n"
     ))
 
     cells.append(_md(
@@ -107,10 +109,12 @@ def build():
     cells.append(_code(
         "# Per-bit transition map: for each bit position, find the rows where it changes.\n"
         "if 'hr19_status' in df.columns:\n"
+        "    # Only HR rows carry reg 19; the column is float because IR rows are NaN.\n"
+        "    status = df['hr19_status'].dropna().astype(int)\n"
         "    bits = pd.DataFrame({\n"
-        "        f'bit_{i}': (df['hr19_status'] >> i) & 1 for i in range(8)\n"
+        "        f'bit_{i}': (status.to_numpy() >> i) & 1 for i in range(8)\n"
         "    })\n"
-        "    bits['ts'] = df['ts'].values\n"
+        "    bits['ts'] = df.loc[status.index, 'ts'].values\n"
         "    transitions = {}\n"
         "    for i in range(8):\n"
         "        col = f'bit_{i}'\n"
@@ -122,23 +126,24 @@ def build():
     ))
 
     cells.append(_md(
-        "## C. Block 3 bytes 32-35 -- static threshold or dynamic tracker?\n\n"
-        "**PACE hypothesis (test first):** these are per-cell over-/under-voltage protection "
-        "thresholds from PACE `CID2=0x47 ChargeDischargeManagementInfo`. If so they should "
-        "be near-static across all scenarios.\n\n"
-        "**Fall-through:** if they vary, check whether they track max/min cell voltage "
-        "(extreme-cell tracker) or some other dynamic value.\n"
+        "## C. Block 3 bytes 32-35 -- max and min temperature\n\n"
+        "**Current reading:** max and min temperature in 0.1 degC. In a 66-hour G3 capture "
+        "they match the inverter's reported `t_max` and `t_min` exactly, about 20 s later. "
+        "See `docs/03-input-registers.md`.\n\n"
+        "**Check:** plot them against the TCP values.\n"
     ))
     cells.append(_code(
-        "if {'block3_b32_offset', 'block3_b34_offset'}.issubset(df.columns):\n"
-        "    print('block3_b32 stats:'); print(df['block3_b32_offset'].describe())\n"
-        "    print('\\nblock3_b34 stats:'); print(df['block3_b34_offset'].describe())\n"
+        "if {'max_temp_decidegC', 'min_temp_decidegC'}.issubset(df.columns):\n"
+        "    temps = df[['ts', 'max_temp_decidegC', 'min_temp_decidegC']].dropna()\n"
         "    fig, ax = plt.subplots(figsize=(12, 4))\n"
-        "    ax.plot(df['ts'], df['block3_b32_offset'], label='b32 (mV)')\n"
-        "    ax.plot(df['ts'], df['block3_b34_offset'], label='b34 (mV)')\n"
-        "    ax.set_ylabel('mV'); ax.legend(); ax.grid(True, alpha=0.3)\n"
+        "    ax.plot(temps['ts'], temps['max_temp_decidegC'] / 10, label='Block 3 max (degC)')\n"
+        "    ax.plot(temps['ts'], temps['min_temp_decidegC'] / 10, label='Block 3 min (degC)')\n"
+        "    if {'tcp_t_max', 'tcp_t_min'}.issubset(df.columns):\n"
+        "        ax.plot(df['ts'], df['tcp_t_max'], '--', alpha=0.6, label='TCP t_max')\n"
+        "        ax.plot(df['ts'], df['tcp_t_min'], '--', alpha=0.6, label='TCP t_min')\n"
+        "    ax.set_ylabel('degC'); ax.legend(); ax.grid(True, alpha=0.3)\n"
         "else:\n"
-        "    print('Block 3 unknown bytes not present')\n"
+        "    print('Block 3 temperatures not present')\n"
     ))
 
     cells.append(_md(
