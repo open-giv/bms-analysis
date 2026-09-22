@@ -60,7 +60,7 @@ def build():
     cells.append(_md("## Timeline overview"))
     cells.append(_code(
         "fig, axes = plt.subplots(3, 1, figsize=(12, 8), sharex=True)\n"
-        "axes[0].plot(df['ts'], df.get('tcp_battery_soc', pd.Series([], dtype=float)), label='TCP SoC')\n"
+        "axes[0].plot(df['ts'], df.get('tcp_soc', pd.Series([], dtype=float)), label='TCP SoC')\n"
         "axes[0].set_ylabel('SoC %')\n"
         "axes[1].plot(df['ts'], df.get('hr23_pack_current_cA', pd.Series([], dtype=float)) / 100, label='Pack current (A)')\n"
         "axes[1].set_ylabel('A')\n"
@@ -81,9 +81,9 @@ def build():
     ))
     cells.append(_code(
         "# PACE hypothesis: reg 11 == main pack SoC * 100\n"
-        "if 'tcp_battery_soc' in df.columns and 'hr11_soc_x100' in df.columns:\n"
+        "if 'tcp_soc' in df.columns and 'hr11_soc_x100' in df.columns:\n"
         "    fig, ax = plt.subplots(figsize=(8, 8))\n"
-        "    ax.scatter(df['tcp_battery_soc'] * 100, df['hr11_soc_x100'], s=4, alpha=0.4)\n"
+        "    ax.scatter(df['tcp_soc'] * 100, df['hr11_soc_x100'], s=4, alpha=0.4)\n"
         "    lim = [0, 10000]; ax.plot(lim, lim, 'r--', alpha=0.5)\n"
         "    ax.set_xlabel('TCP SoC * 100'); ax.set_ylabel('HR reg 11')\n"
         "    ax.set_title('PACE hypothesis: reg 11 == main pack SoC * 100')\n"
