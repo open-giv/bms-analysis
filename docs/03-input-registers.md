@@ -6,7 +6,7 @@ The inverter polls input registers from each battery (devices 1..5) using FC=4 r
 |---|---|---:|---|
 | Block 1 | `0x0000` | 21 regs | Serial number + temperature sensors |
 | Block 2 | `0x0015` | 19 regs | Cell count, cycles, pack voltage, capacities, SoC, firmware version |
-| Block 3 | `0x0028` | 20 regs | Per-cell voltages + min/max cell voltage + reserved |
+| Block 3 | `0x0028` | 20 regs | Per-cell voltages + max/min temperature + max/min cell voltage |
 
 The blocks are not contiguous: there's a gap at register `0x003C` and beyond (not polled).
 
@@ -20,6 +20,7 @@ The blocks are not contiguous: there's a gap at register `0x003C` and beyond (no
 |---|---|
 | IR poll interval (per query) | ~10-12 seconds between repetitions of the same query |
 | Full device x block sweep | ~3 minutes for 5 devices x 3 blocks |
+| Per-block interval on a G3 (66-hour capture) | Block 1 about every 10.5 s per device; Blocks 2 and 3 about every 200 s per device |
 | BMS turnaround latency | 84-89 ms (faster than HR because responses are smaller) |
 | Devices polled | 1, 2, 3, 4, 5 (all five regardless of which are populated) |
 
@@ -108,14 +109,14 @@ a8 00 00 46 7b 5d 00 00 0e 10 00 00 00 00 00 0b ce 00
 | Reg | Offset | Bytes | Field | Notes |
 |--:|---:|---:|---|---|
 | 40 | 0 | 32 | 16 cell voltages | Each cell = 2 bytes big-endian, **raw mV**, no offset. E.g. `0x0D07` = 3335 mV. |
-| 56 | 32 | 2 | Max cell temp | Tracks very closely to the max temp in block 1 |
-| 57 | 34 | 2 | Min cell temp | Tracks very closely to the min temp in block 1 |
+| 56 | 32 | 2 | Max cell temp | 0.1 °C, signed. The inverter reports this unchanged as its battery `t_max`. |
+| 57 | 34 | 2 | Min cell temp | 0.1 °C, signed. The inverter reports this unchanged as its battery `t_min`. |
 | 58 | 36 | 2 | Max cell voltage | Raw mV. `0x0D09` = 3337 mV (slightly higher than highest individual cell). |
 | 59 | 38 | 2 | Min cell voltage | Raw mV. `0x0D05` = 3333 mV. |
 
 > **Cell voltage encoding** (per-cell): cell voltages at offsets 0..31 are **raw millivolts** big-endian, 2 bytes per cell, no offset. The 16-cell loop in the FC=4 handler at flash `0x0800_E0A0..0x0800_E0BE` writes them directly without applying any bias.
 >
-> **Aggregate-field encoding (offsets 32-35)**: these two fields ARE encoded with a `-2730` mV offset (the firmware applies `subw r1, r1, #0xAAA` at flash 0x0800_E0C0 / 0x0800_E0CE before writing them to TX). Decoders need to add 2730 mV to recover the user-facing value.
+> **Aggregate-field encoding (offsets 32-35)**: these two fields are the max and min temperature in 0.1 °C. The firmware stores temperatures internally as `decidegC + 2730` and applies `subw r1, r1, #0xAAA` at flash 0x0800_E0C0 / 0x0800_E0CE before writing them to TX, so the wire value is plain 0.1 °C. Decoders should read them as signed 0.1 °C and must not add 2730. An earlier version of this note described them as millivolts with a -2730 offset. The 66-hour G3 capture shows they match the inverter's reported `t_max` and `t_min` exactly (see [06-wire-captures.md](06-wire-captures.md#findings-from-a-66-hour-g3-capture)).
 >
 > The **max / min cell voltage at offsets 36-39 are raw mV** (no `subw` applied) - same encoding as the per-cell values.
 >
@@ -126,7 +127,7 @@ Example (device 1 in cold_start.log):
 ```
 0c f4 0c f5 0c f5 0c f7 0c f7 0c f7 0c f7 0c f8 0c f8 0c f8    ; cells 1-10
 0c fa 0c fa 0c fa 0c fa 0c fa 0c fc                            ; cells 11-16
-00 b3 00 a5                                                    ; unknown (179, 165)
+00 b3 00 a5                                                    ; max temp 17.9 °C, min temp 16.5 °C
 0c fc 0c f4                                                    ; max=3324 mV, min=3316 mV
 ```
 

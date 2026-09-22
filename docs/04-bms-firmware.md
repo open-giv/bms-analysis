@@ -98,8 +98,8 @@ The FC=4 handler at `0x0800_DEBC` populates the response from a per-pack structu
 | `0x0800_DFA4` | Block 1 | 26-27 | Temperature 3 | same |
 | `0x0800_DFB0` | Block 1 | 28-29 | Temperature 4 | same |
 | `0x0800_DFBC` | Block 1 | 30-31 | Temperature 5 | same |
-| `0x0800_E0C0` | Block 3 | 32-33 | unknown | wire = `value - 2730`; decoder adds 2730 |
-| `0x0800_E0CE` | Block 3 | 34-35 | unknown | wire = `value - 2730`; decoder adds 2730 |
+| `0x0800_E0C0` | Block 3 | 32-33 | Max temperature | `(decidegC + 2730)` -> `subw` -> wire = raw decidegC |
+| `0x0800_E0CE` | Block 3 | 34-35 | Min temperature | `(decidegC + 2730)` -> `subw` -> wire = raw decidegC |
 
 **Per-cell voltages** at Block 3 bytes 0-31 do NOT pass through `subw` - the cell loop at `0x0800_E0A0..0x0800_E0BE` writes them as raw mV. Confirmed by wire data (`0x0CF4` = 3316 mV directly).
 
@@ -107,11 +107,11 @@ The FC=4 handler at `0x0800_DEBC` populates the response from a per-pack structu
 
 **Block 2 fields** (cycles, capacities, pack voltage, SoC, firmware version) all use direct strb without `subw`.
 
-The internal storage bias of `+2730` for temperatures is presumably to keep them as unsigned uint16 (so -30.0 deg C internal = 2400, well above zero). The same bias appears in the inter-pack PACE protocol on UART4. The two unknown Block 3 fields probably similarly use the bias for some signed mV-like quantity.
+The internal storage bias of `+2730` for temperatures is presumably to keep them as unsigned uint16 (so -30.0 deg C internal = 2400, well above zero). The same bias appears in the inter-pack PACE protocol on UART4. The two Block 3 fields at offsets 32-35 use the same bias: they are the max and min temperature, and the wire value is raw decidegC. The 66-hour G3 capture confirms this, because they match the inverter's reported `t_max` and `t_min` exactly.
 
-**HR reg 24 also encodes `(min_cell_mV - 2730) / 10`** via a separate `subw` at `0x0800_D76A` (writes to the HR table backing store, not to the FC=4 response).
+**HR reg 24 also uses the bias**, via a separate `subw` at `0x0800_D76A` (writes to the HR table backing store, not to the FC=4 response). It encodes the maximum cell temperature in whole °C, `(max_raw - 2730) / 10`. See [02-holding-registers.md](02-holding-registers.md).
 
-For an emulator: emit cells / max / min as raw mV; emit Block 1 temps as raw decidegC (signed int16 if you need negative temperatures); emit Block 3 bytes 32-35 as `(your_mV_value - 2730)`.
+For an emulator: emit cells / max / min as raw mV; emit Block 1 temps as raw decidegC (signed int16 if you need negative temperatures); emit Block 3 bytes 32-35 as max and min temperature in raw decidegC, the same encoding as the Block 1 temps.
 
 ## Runtime mirror tasks (dynamic-trace findings)
 
