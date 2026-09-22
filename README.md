@@ -44,6 +44,7 @@ The original empirical analysis - hardware setup, RS485 captures, raw hex traces
 | [tools/parse_log.py](tools/parse_log.py) | Parses serial_hexdump_logger output into Modbus frames with cadence/latency analysis. Handles GivEnergy's non-standard FC=4 framing. |
 | [tools/tcp_poller.py](tools/tcp_poller.py) | Polls the inverter's local Modbus TCP API at a fixed cadence and emits NDJSON. Used as a labelled ground-truth stream during a wire-capture campaign. |
 | [tools/mqtt_logger.py](tools/mqtt_logger.py) | Records GivTCP's MQTT output as NDJSON snapshots in the same format as `tcp_poller.py`, without polling the inverter. Used by the capture box. |
+| [capture-box/](capture-box/README.md) | Raspberry Pi capture box: systemd services, udev rule and setup script for recording the BMS bus and GivTCP's MQTT output around the clock. |
 | [tools/tag.py](tools/tag.py) | Manual + auto scenario annotation helper. Manual mode appends one timestamped tag; auto mode tails a TCP NDJSON file and emits tags on state changes. |
 | [tools/decode_fields.py](tools/decode_fields.py) | Field-level decoder: takes a parsed Modbus response frame and returns a dict of named BMS fields per `docs/02` and `docs/03`. |
 | [tools/pace_reference.py](tools/pace_reference.py) | Reference data for PACE / Pylontech v2.5 protocol fields and bit positions. Used by analysis notebooks to test PACE hypotheses against decoded GivEnergy fields. |
