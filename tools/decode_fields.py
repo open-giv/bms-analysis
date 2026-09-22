@@ -26,7 +26,8 @@ def decode_hr_response(data: bytes) -> Dict[str, Any]:
     """Decode HR(0..27) -> 56-byte response data portion.
 
     Byte offsets are per docs/02-holding-registers.md (reg * 2 = byte offset):
-      Reg 11 -> bytes 22-23: SoC * 100 (uint16)
+      Reg 11 -> bytes 22-23: capacity of batteries online, whole Ah (uint16;
+                              stays fixed through a discharge)
       Reg 17 -> bytes 34-35: dynamic hash (uint16)
       Reg 19 -> bytes 38-39: composite status/fault bitmask (observed values
                               fit in 8 bits; read as uint16 per register model)
@@ -36,7 +37,7 @@ def decode_hr_response(data: bytes) -> Dict[str, Any]:
     if len(data) != 56:
         return {}
     fields: Dict[str, Any] = {
-        "hr11_soc_x100": _u16_be(data, 22),
+        "hr11_capacity_Ah": _u16_be(data, 22),
         "hr17_dynamic": _u16_be(data, 34),
         "hr19_status": _u16_be(data, 38),
         "hr23_pack_current_cA": _s16_be(data, 46),
@@ -97,8 +98,9 @@ def decode_ir_block3(data: bytes) -> Dict[str, Any]:
 
     Byte offsets are per docs/03-input-registers.md Block 3 layout:
       Bytes  0-31: 16 cell voltages, 2 bytes each, raw mV big-endian (no offset)
-      Bytes 32-33: unknown field, (value - 2730) encoded; add 2730 to decode
-      Bytes 34-35: unknown field, (value - 2730) encoded; add 2730 to decode
+      Bytes 32-33: Max temperature, signed int16 decidegC (firmware removes the
+                   +2730 bias before TX, as for the Block 1 temps)
+      Bytes 34-35: Min temperature, signed int16 decidegC
       Bytes 36-37: Max cell voltage, raw mV
       Bytes 38-39: Min cell voltage, raw mV
     """
@@ -107,8 +109,8 @@ def decode_ir_block3(data: bytes) -> Dict[str, Any]:
     fields: Dict[str, Any] = {}
     for i in range(16):
         fields[f"cell_{i}_mV"] = _u16_be(data, i * 2)
-    fields["block3_b32_offset"] = _s16_be(data, 32) + 2730
-    fields["block3_b34_offset"] = _s16_be(data, 34) + 2730
+    fields["max_temp_decidegC"] = _s16_be(data, 32)
+    fields["min_temp_decidegC"] = _s16_be(data, 34)
     fields["max_cell_mV"] = _u16_be(data, 36)
     fields["min_cell_mV"] = _u16_be(data, 38)
     return fields

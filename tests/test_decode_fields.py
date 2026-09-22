@@ -24,7 +24,7 @@ def test_decode_hr_response_returns_known_field_set():
     data = (FIXTURES / "sample_hr_response.bin").read_bytes()
     fields = decode_hr_response(data)
     expected = {
-        "hr11_soc_x100", "hr17_dynamic", "hr19_status",
+        "hr11_capacity_Ah", "hr17_dynamic", "hr19_status",
         "hr23_pack_current_cA", "hr25_current_limit",
     }
     assert expected.issubset(fields.keys())
@@ -90,3 +90,27 @@ def test_decode_ir_block3_min_max_cells_match_extremes():
     cells = [fields[f"cell_{i}_mV"] for i in range(16)]
     assert fields["max_cell_mV"] == max(cells)
     assert fields["min_cell_mV"] == min(cells)
+
+
+def test_decode_hr_response_hr11_is_capacity_in_whole_ah():
+    data = (FIXTURES / "sample_hr_response.bin").read_bytes()
+    fields = decode_hr_response(data)
+    assert fields["hr11_capacity_Ah"] == 186  # one 9.5 kWh pack
+    assert "hr11_soc_x100" not in fields
+
+
+def test_decode_ir_block3_max_min_temps_are_decidegC():
+    data = (FIXTURES / "sample_ir_block3.bin").read_bytes()
+    fields = decode_ir_block3(data)
+    assert fields["max_temp_decidegC"] == 179  # 00 B3 = 17.9 degC
+    assert fields["min_temp_decidegC"] == 165  # 00 A5 = 16.5 degC
+    assert "block3_b32_offset" not in fields
+    assert "block3_b34_offset" not in fields
+
+
+def test_decode_ir_block3_temps_below_zero_are_negative():
+    data = bytearray((FIXTURES / "sample_ir_block3.bin").read_bytes())
+    data[32:36] = bytes.fromhex("FF9C FFCE")  # -10.0 degC, -5.0 degC
+    fields = decode_ir_block3(bytes(data))
+    assert fields["max_temp_decidegC"] == -100
+    assert fields["min_temp_decidegC"] == -50
