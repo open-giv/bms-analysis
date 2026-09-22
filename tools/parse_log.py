@@ -51,7 +51,8 @@ def load_byte_stream(path):
             m = LINE_RE.match(line.rstrip())
             if not m:
                 continue
-            ts = datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S.%f")
+            # Aware if the line ends in Z (UTC); naive for older local-time logs.
+            ts = datetime.fromisoformat(m.group(1))
             raw = bytes.fromhex(m.group(3).replace(' ', ''))
             for b in raw:
                 stream.append(b)

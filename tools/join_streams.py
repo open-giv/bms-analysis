@@ -12,8 +12,13 @@ import parse_log  # noqa: E402
 import decode_fields  # noqa: E402
 
 
-def load_wire_records(wire_path: Path) -> pd.DataFrame:
-    """Decode wire.log into a DataFrame, one row per request/response pair."""
+def load_wire_records(wire_path: Path, wire_tz: str | None = None) -> pd.DataFrame:
+    """Decode wire.log into a DataFrame, one row per request/response pair.
+
+    Timestamps come back in UTC. Current logger output is already UTC; older
+    logs are local wall-clock time with no zone, so `wire_tz` (e.g.
+    "Europe/London") must name the zone the logging machine was set to.
+    """
     stream, timestamps = parse_log.load_byte_stream(str(wire_path))
     frames, _ = parse_log.parse_frames(stream, timestamps)
     pairs = parse_log.pair_request_response(frames)
@@ -29,7 +34,16 @@ def load_wire_records(wire_path: Path) -> pd.DataFrame:
         decoded = decode_fields.decode_response(rsp, req)
         row.update(decoded)
         rows.append(row)
-    return pd.DataFrame(rows)
+    wire = pd.DataFrame(rows)
+    if wire.empty:
+        return wire
+    if wire["ts"].dt.tz is None:
+        if wire_tz is None:
+            raise ValueError(f"{wire_path} has no timezone in its timestamps; "
+                             "pass --wire-tz with the logging machine's zone, e.g. Europe/London")
+        wire["ts"] = wire["ts"].dt.tz_localize(wire_tz, ambiguous="infer")
+    wire["ts"] = wire["ts"].dt.tz_convert("UTC")
+    return wire
 
 
 def load_tcp_records(tcp_path: Path) -> pd.DataFrame:
@@ -102,10 +116,12 @@ def main():
     p.add_argument("--wire", type=Path, required=True)
     p.add_argument("--tcp", type=Path, required=True)
     p.add_argument("--tags", type=Path)
+    p.add_argument("--wire-tz", help="Timezone of an older wire.log with no zone in its "
+                                     "timestamps, e.g. Europe/London")
     p.add_argument("--out", type=Path, required=True)
     args = p.parse_args()
 
-    wire = load_wire_records(args.wire)
+    wire = load_wire_records(args.wire, args.wire_tz)
     tcp = load_tcp_records(args.tcp)
     tags = load_tag_records(args.tags) if args.tags else pd.DataFrame()
 

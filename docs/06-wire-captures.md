@@ -26,15 +26,17 @@ The dongle will see all traffic on the bus without interfering. No splicing of t
 The tool [`tools/serial_hexdump_logger.c`](../tools/serial_hexdump_logger.c) (originally by @kenbell) logs all incoming RS485 bytes with timestamps to a file. Output format:
 
 ```
-2026-05-01 07:23:39.416  00000000  01 03 00 00 00 1C 44 03                          |......D.|
-2026-05-01 07:23:39.516  00000008  01 03 38 00 65 FF FF FF FF FF FF FF FF XX XX XX  |..8.e...........|
-2026-05-01 07:23:39.516  00000018  XX XX XX XX XX XX XX FF FF 00 BA 00 30 0B CE 00  |..............0.|
+2026-05-01 07:23:39.416Z  00000000  01 03 00 00 00 1C 44 03                          |......D.|
+2026-05-01 07:23:39.516Z  00000008  01 03 38 00 65 FF FF FF FF FF FF FF FF XX XX XX  |..8.e...........|
+2026-05-01 07:23:39.516Z  00000018  XX XX XX XX XX XX XX FF FF 00 BA 00 30 0B CE 00  |..............0.|
 ...
 ```
 
 (Serial bytes redacted with `XX` placeholders. In a real capture, bytes 13-22 of the HR response carry the BMS serial as ASCII.)
 
 Each line shows: timestamp, byte offset into the capture stream, up to 16 hex bytes, and the ASCII rendering of those bytes.
+
+Timestamps are UTC, marked with a trailing `Z`. Logs from older versions of the logger are in the logging machine's local time with no zone marker. `tools/join_streams.py` refuses those unless you pass `--wire-tz` (e.g. `--wire-tz Europe/London`), because joining local time against `tcp_poller.py`'s UTC timestamps shifts every TCP value by the UTC offset.
 
 Timestamps are when the logger flushed - lines sharing a timestamp are bytes received in the same flush, typically belonging to one Modbus frame. **Note**: occasionally the logger splits a frame across two flushes ~1 ms apart; a parser must handle this (see [`tools/parse_log.py`](../tools/parse_log.py) for a robust approach).
 
