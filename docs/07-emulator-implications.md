@@ -74,6 +74,8 @@ The strictest validation seen across inverter variants:
 
 Stay inside these envelopes for portable emulation. Realistic LiFePO4 values (~3.2-3.4 V/cell at typical SoC, ambient temperature) easily satisfy them.
 
+For a worked design of a specific case, a Seplos BMS battery on a GivEnergy G3 inverter, see [11-seplos-emulator-design.md](11-seplos-emulator-design.md).
+
 ## Polling cadence to expect
 
 Driven by the inverter:

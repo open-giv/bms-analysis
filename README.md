@@ -32,6 +32,7 @@ The original empirical analysis - hardware setup, RS485 captures, raw hex traces
 | [docs/08-bridge-implementation.md](docs/08-bridge-implementation.md) | **Goal 2** - Bridge implementation (GivEnergy battery -> 3rd-party inverter) |
 | [docs/09-pace-comparison.md](docs/09-pace-comparison.md) | Field-by-field comparison between the GivEnergy Modbus layout and PACE / Pylontech - useful background for both goals |
 | [docs/10-pace-bms-tools.md](docs/10-pace-bms-tools.md) | Guide on accessing the PACE BMS directly |
+| [docs/11-seplos-emulator-design.md](docs/11-seplos-emulator-design.md) | **Goal 1** - Design for a Seplos BMS battery (e.g. Fogstar 32 kWh) on a GivEnergy G3 inverter, with open questions |
 
 ## Tools
 
