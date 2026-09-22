@@ -6,6 +6,9 @@ from pathlib import Path
 import pytest
 
 from tools.decode_fields import (
+    HR19_BITS,
+    HR19_EVIDENCE_LEVELS,
+    decode_hr19,
     decode_hr_response,
     decode_ir_block1,
     decode_ir_block2,
@@ -114,3 +117,29 @@ def test_decode_ir_block3_temps_below_zero_are_negative():
     fields = decode_ir_block3(bytes(data))
     assert fields["max_temp_decidegC"] == -100
     assert fields["min_temp_decidegC"] == -50
+
+
+def test_hr19_bits_cover_all_eight_bits_with_evidence_level():
+    assert sorted(HR19_BITS) == list(range(8))
+    for bit, (name, evidence) in HR19_BITS.items():
+        assert name.isidentifier(), f"bit {bit}: {name!r}"
+        assert evidence in HR19_EVIDENCE_LEVELS, f"bit {bit}: {evidence!r}"
+
+
+def test_decode_hr19_discharging_with_cells_ok():
+    flags = decode_hr19(207)  # 1100 1111, seen on every discharging poll in the G3 capture
+    assert flags["discharging_or_idle"] is True
+    assert flags["current_flowing"] is True
+    assert flags["all_cells_ok"] is True
+    assert flags["protection_active"] is False
+
+
+def test_decode_hr19_charging():
+    flags = decode_hr19(206)  # 1100 1110, seen on every charging poll
+    assert flags["discharging_or_idle"] is False
+    assert flags["current_flowing"] is True
+
+
+def test_decode_hr19_at_rest_with_low_cell():
+    flags = decode_hr19(198)  # 1100 0110, seen at the 4% floor
+    assert flags["all_cells_ok"] is False

@@ -22,6 +22,32 @@ def _s16_be(data: bytes, offset: int) -> int:
     return v - 0x10000 if v >= 0x8000 else v
 
 
+# HR reg 19 bits (0-indexed) -> (name, evidence level).
+# Names follow the firmware source mapping in docs/02-holding-registers.md.
+# Evidence levels say how far each meaning has been checked against real wire
+# data, because the firmware analysis was done on BMS v3022 and G3 batteries
+# can run other versions (the 66-hour G3 capture reports v4009):
+#   "confirmed on wire"  - wire data shows the bit following this meaning
+#   "consistent"         - wire data fits this meaning but never fully tests it
+#   "firmware only"      - never changed in any capture; name is from firmware
+HR19_EVIDENCE_LEVELS = ("confirmed on wire", "consistent", "firmware only")
+HR19_BITS = {
+    0: ("discharging_or_idle", "confirmed on wire"),
+    1: ("current_flowing", "consistent"),
+    2: ("charge_vote_ok", "firmware only"),
+    3: ("all_cells_ok", "confirmed on wire"),
+    4: ("protection_active", "firmware only"),
+    5: ("discharge_vote", "firmware only"),
+    6: ("allow_discharge", "firmware only"),
+    7: ("allow_charge_and_discharge", "firmware only"),
+}
+
+
+def decode_hr19(value: int) -> Dict[str, bool]:
+    """Split an HR reg 19 value into named flags per HR19_BITS."""
+    return {name: bool((value >> bit) & 1) for bit, (name, _) in HR19_BITS.items()}
+
+
 def decode_hr_response(data: bytes) -> Dict[str, Any]:
     """Decode HR(0..27) -> 56-byte response data portion.
 

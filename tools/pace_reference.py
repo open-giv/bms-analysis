@@ -20,7 +20,9 @@ CID2_GET_MFR_INFO = 0x46    # manufacturer name, software/hardware version
 
 
 # CID2=0x44 GetAlarmInfo pack-level alarm byte - bit positions.
-# Hypothesis source for GivEnergy HR reg 19 (8-bit composite status).
+# Originally the hypothesis source for GivEnergy HR reg 19. Wire data rules it
+# out: bits 0, 1 and 3 follow current direction and cell health, not these
+# alarms. Use decode_fields.HR19_BITS for HR reg 19.
 PACK_ALARM_BITS = {
     0: "cell_overvoltage",
     1: "cell_undervoltage",

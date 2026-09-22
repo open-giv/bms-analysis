@@ -113,7 +113,7 @@ Each of HR19's source bytes was traced back to the firmware function that writes
 | Bit (1-idx) | Source byte | Writer function (flash addr) | Semantic |
 |---:|---|---|---|
 | 3 (charge req?) | `*(u8*)0x20000140` | `compute_pack_current_limits` @ `0x080167BA` | **Charge-vote consensus across packs.** Writer walks all 6 FC=4 pack slots; for each, reads `pack[0x8E]` (per-pack state byte). Increments a counter on state==1, resets it on state==2; final byte is `1` iff counter > 0. HR19 bit 3 is set when the source byte is 0 - i.e. "no charge-vote disagreement". |
-| 4 (MOSFETs enabled?) | `*(u8*)0x200000CE` | `FUN_080209B0` (per-cell V checker) | **All 16 cells within voltage limits.** Writer scans the per-cell voltage array; flags a cell if `cell_mV < 2600` OR `cell_mV < (threshold + 50)` (when |current| < 1 A) OR `cell_mV < (threshold + 200)` (when |current| >= 1 A). Sets source byte to 1 if any cell fails, 0 if all pass. HR19 bit 4 is set when source byte is 0 -> "all cells OK". Confirms Ken's "Battery MOSFETs enabled?" observation. |
+| 4 (MOSFETs enabled?) | `*(u8*)0x200000CE` | `FUN_080209B0` (per-cell V checker) | **All 16 cells within voltage limits.** Writer scans the per-cell voltage array; flags a cell if `cell_mV < 2600` OR `cell_mV < (threshold + 50)` (when |current| < 1 A) OR `cell_mV < (threshold + 200)` (when |current| >= 1 A). Sets source byte to 1 if any cell fails, 0 if all pass. HR19 bit 4 is set when source byte is 0 -> "all cells OK". Confirms Ken's "Battery MOSFETs enabled?" observation. **The current dependence conflicts with G3 wire data** (see [Evidence from a G3 capture](#evidence-from-a-g3-capture)): the bit never cleared under load, even with a cell at 2951 mV, and only cleared at rest. |
 | 5 (normally low) | `*(u8*)0x2000009D` | `FUN_0801ED08` (clearer) + `FUN_0801151E` (setter) | **Any BMS protection flag active.** Setter-context analysis shows **only bit 1** of `0x2000009D` is ever set or cleared -- effectively a single boolean. Setters: `FUN_0801151E` (counter timeout `>= 100`) + `FUN_0801ED08` (AFE-flag-set path); both `ORR #0x02`. Clearer: `FUN_0801ED08` after recovery debouncing. The 8-bit iteration in `FUN_0801ED08` is over a DIFFERENT upstream event bitmap; the aggregated result lands in bit 1 of `0x2000009D`. HR19 bit 5 is set when source byte is non-zero -> "any protection active". Matches Ken's "normally low" observation. |
 | 6 (forbid charge?) | `*(u8*)0x20000141` | `compute_pack_current_limits` | **Discharge-vote consensus across packs.** Same logic as bit 3 with reversed polarity: state==2 increments, state==1 resets. Combined with bit 3, the pair encodes a 2-bit consensus mode (idle/charge/discharge/disagreement). |
 
@@ -124,7 +124,24 @@ Bits 1/2 (charge/discharge direction encoding via IEEE-754 equality with zero on
 | `0x9A` | bit 1 (val `0x02`) | bit 8 | "Allow Charge and Discharge?" |
 | `0x9B` | bit 2 (val `0x04`) | bit 7 | "Allow Discharge?" |
 
-So **CID2 = 0x9A is the AFE "Allow Charge and Discharge" state-set command**, and **CID2 = 0x9B is the AFE "Allow Discharge" state-set command**. Both commands first clear the current-alarm and temperature-alarm bitmaps (a state-transition reset), then OR their specific bit into the voltage-alarm byte. Bits 1/2 of HR19 still rely on Ken's behaviour observations for semantic naming.
+So **CID2 = 0x9A is the AFE "Allow Charge and Discharge" state-set command**, and **CID2 = 0x9B is the AFE "Allow Discharge" state-set command**. Both commands first clear the current-alarm and temperature-alarm bitmaps (a state-transition reset), then OR their specific bit into the voltage-alarm byte. Bits 1/2 of HR19 are now backed by G3 wire data (see below).
+
+#### Evidence from a G3 capture
+
+The firmware analysis above was done on BMS firmware v3022. The 66-hour G3 capture (see [06-wire-captures.md](06-wire-captures.md#findings-from-a-66-hour-g3-capture)) comes from a battery reporting firmware v4009, so each bit was checked against its wire data. The check uses the exact sign of HR23 in the same response, so it doesn't depend on the TCP stream. `tools/decode_fields.py` records the result as an evidence level for each bit in `HR19_BITS`.
+
+| Bit (0-idx) | Name in `HR19_BITS` | Evidence | What the G3 data shows |
+|---:|---|---|---|
+| 0 | `discharging_or_idle` | confirmed on wire | Set in all 658,795 polls with HR23 < 0 and clear in all 642,869 polls with HR23 > 0. Mixed when HR23 = 0, because HR23 is rounded to 0.01 A and the firmware tests the unrounded current. |
+| 1 | `current_flowing` | consistent | Set whenever HR23 is non-zero. Clear in only 13 polls, all with HR23 = 0. |
+| 2 | `charge_vote_ok` | firmware only | Always set, including 8 hours at the 4% SoC floor. Ken saw it go low at minimum SoC, possibly only during a calibration cycle. |
+| 3 | `all_cells_ok` | confirmed on wire | Clears only when the current is within 1 A of zero and the lowest cell is at or below 3039 mV. Never clears with more than 1 A flowing, even with a cell at 2951 mV. The meaning holds, but the firmware reading that the check is stricter under load does not match. |
+| 4 | `protection_active` | firmware only | Always clear. |
+| 5 | `discharge_vote` | firmware only | Always clear. |
+| 6 | `allow_discharge` | firmware only | Always set. |
+| 7 | `allow_charge_and_discharge` | firmware only | Always set. |
+
+An earlier hypothesis mapped HR19 onto the PACE `CID2=0x44` pack alarm byte (`PACK_ALARM_BITS` in `tools/pace_reference.py`). The wire data rules this out. Bit 0 would be a cell overvoltage alarm that is set on every discharge poll, bit 1 a cell undervoltage alarm that is almost always set, and bit 3 an undervoltage alarm with the wrong polarity.
 
 ### Register 20 Bits
 

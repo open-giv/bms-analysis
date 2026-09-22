@@ -50,3 +50,10 @@ def test_notebook_wire_columns_exist_in_decoder_output(name):
     assert wire, f"{name} reads no wire columns; test is not checking anything"
     unknown = wire - _decoded_columns() - JOIN_COLUMNS
     assert not unknown, f"{name} reads columns the decoder never writes: {sorted(unknown)}"
+
+
+@pytest.mark.parametrize("name", ["build_notebook.py", "analysis_template.ipynb"])
+def test_notebook_labels_hr19_bits_from_decoder_not_pace(name):
+    text = (TOOLS / name).read_text()
+    assert "HR19_BITS" in text
+    assert "PACK_ALARM_BITS.get" not in text
