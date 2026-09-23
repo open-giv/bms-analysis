@@ -21,6 +21,7 @@ flush. Modbus frames may span multiple flushes (~1 ms apart) - the parser
 reassembles by walking the byte stream and using the FC byte to determine
 expected frame length.
 """
+import gzip
 import re
 import sys
 from collections import Counter, defaultdict
@@ -42,11 +43,22 @@ def crc16(data):
     return crc & 0xFFFF
 
 
+def open_capture(path):
+    """Open a capture file for reading as text, gzipped (as givcap-compress leaves it) or not.
+
+    Goes by the gzip magic bytes, not the name, so redact.py's default output
+    (wire.log.gz.redacted) reads too.
+    """
+    with open(path, "rb") as f:
+        gzipped = f.read(2) == b"\x1f\x8b"
+    return gzip.open(path, "rt") if gzipped else open(path)
+
+
 def load_byte_stream(path):
-    """Read the logger file into (bytes, per-byte timestamps)."""
+    """Read the logger file into (bytes, per-byte timestamps). Reads .gz too."""
     stream = bytearray()
     timestamps = []
-    with open(path) as f:
+    with open_capture(path) as f:
         for line in f:
             m = LINE_RE.match(line.rstrip())
             if not m:

@@ -7,6 +7,7 @@ GIVE_REDACT_SERIALS and GIVE_REDACT_IPS (comma-separated).
 Idempotent: re-running on already-redacted output produces the same output.
 """
 import argparse
+import gzip
 import os
 import sys
 from pathlib import Path
@@ -66,14 +67,28 @@ def redact_bytes(payload: bytes, config: Dict[str, Any]) -> bytes:
 
 
 def redact_file(in_path: Path, out_path: Path, config: Dict[str, Any]) -> None:
-    """Redact a file, choosing text vs bytes based on extension."""
+    """Redact a file, choosing text vs bytes based on extension.
+
+    A gzipped file (as givcap-compress leaves finished days) is decompressed, redacted by the
+    extension of the name inside it (wire.log.gz and wire.log.gz.redacted both count as .log),
+    and compressed again. Searching the compressed bytes would find nothing.
+    """
     in_path = Path(in_path)
     out_path = Path(out_path)
     text_exts = {".log", ".ndjson", ".json", ".md", ".csv", ".txt"}
-    if in_path.suffix.lower() in text_exts:
+    data = in_path.read_bytes()
+    if data[:2] == b"\x1f\x8b":
+        inner = [s.lower() for s in in_path.suffixes if s.lower() not in (".gz", ".redacted")]
+        data = gzip.decompress(data)
+        if inner and inner[-1] in text_exts:
+            data = redact_text(data.decode("utf-8"), config).encode("utf-8")
+        else:
+            data = redact_bytes(data, config)
+        out_path.write_bytes(gzip.compress(data))
+    elif in_path.suffix.lower() in text_exts:
         out_path.write_text(redact_text(in_path.read_text(), config))
     else:
-        out_path.write_bytes(redact_bytes(in_path.read_bytes(), config))
+        out_path.write_bytes(redact_bytes(data, config))
 
 
 def main():
