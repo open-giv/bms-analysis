@@ -42,5 +42,15 @@ Keep raw captures out of git. They contain your battery and inverter serial numb
 `tools/mqtt_logger.py` writes unmapped topics under names made from the topic path, with each `/` or other symbol replaced by `_` and the case kept. To give the main values the same names that `tools/tcp_poller.py` uses, so that the analysis notebook works unchanged, record a sample and fill in `TOPIC_TO_FIELD`:
 
 ```
-mosquitto_sub -h BROKER -u USER -P PASSWORD -t 'PREFIX/#' -v -W 120 > givtcp_sample.txt
+sudo bash -c 'set -a; . /etc/givcap/mqtt.env; mosquitto_sub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASSWORD" -t "$MQTT_TOPIC_PREFIX/#" -v -W 120' > givtcp_sample.txt
 ```
+
+This reads the broker details from `/etc/givcap/mqtt.env`, so the password doesn't end up in your shell history.
+
+Each line of the sample is a topic and its value. Pick the topic for each value that `tools/tcp_poller.py` records (e.g. the battery SoC topic for `soc`), and add it to `TOPIC_TO_FIELD` in `tools/mqtt_logger.py`, keyed by the topic path after the prefix:
+
+```python
+TOPIC_TO_FIELD = {"Battery_Details/SOC": "soc", ...}
+```
+
+Replace any serial numbers in the sample with `XXXXXXXXXX` before committing it as a test fixture. Then restart the logger with `sudo systemctl restart givcap-mqtt`.

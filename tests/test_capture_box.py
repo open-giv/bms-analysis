@@ -97,3 +97,13 @@ def test_mqtt_env_example_has_every_required_variable():
     text = (BOX / "mqtt.env.example").read_text()
     for name in REQUIRED_ENV:
         assert re.search(rf"^{name}=", text, re.M), name
+
+
+def test_wire_unit_can_open_the_serial_device():
+    assert _unit("givcap-wire.service")["Service"]["SupplementaryGroups"] == "dialout"
+
+
+def test_setup_does_not_wait_on_an_absent_dongle():
+    setup = (BOX / "setup.sh").read_text()
+    assert "[[ -e /dev/rs485 ]]" in setup
+    assert "systemctl --no-block restart givcap-wire.service" in setup

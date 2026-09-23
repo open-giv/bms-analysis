@@ -3,12 +3,12 @@
 Run on the Pi as `givcap-status` (capture-box/givcap-status wraps this file).
 """
 import json
+import os
 import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-CAPTURES = Path.home() / "captures"
 SERVICE_NAMES = ("givcap-wire", "givcap-mqtt")
 LOW_DISK_BYTES = 2 * 10**9
 TAIL_BYTES = 8192
@@ -83,6 +83,11 @@ def report(captures_dir: Path, now: datetime, services: dict[str, str],
     return lines
 
 
+def captures_dir(env=os.environ) -> Path:
+    """CAPTURES_DIR if set (e.g. under sudo, where the home folder is root's), else ~/captures."""
+    return Path(env["CAPTURES_DIR"]) if env.get("CAPTURES_DIR") else Path.home() / "captures"
+
+
 def _run(cmd: list[str]) -> str:
     try:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=10).stdout.strip()
@@ -101,8 +106,9 @@ def _service_state(name: str) -> str:
 def main() -> None:
     services = {name: _service_state(name) for name in SERVICE_NAMES}
     synced = _run(["timedatectl", "show", "-p", "NTPSynchronized", "--value"]) or "unknown"
-    free = shutil.disk_usage(CAPTURES if CAPTURES.exists() else Path.home()).free
-    for line in report(CAPTURES, datetime.now(timezone.utc), services, free, synced):
+    captures = captures_dir()
+    free = shutil.disk_usage(captures if captures.exists() else Path.home()).free
+    for line in report(captures, datetime.now(timezone.utc), services, free, synced):
         print(line)
 
 

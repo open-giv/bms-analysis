@@ -80,3 +80,9 @@ def test_report_distinguishes_unreadable_from_missing(tmp_path):
     text = "\n".join(report(tmp_path, NOW, SERVICES, free_bytes=20 * 10**9, clock_synced="yes"))
     assert "wire.log: exists but no readable timestamp" in text
     assert "tcp.ndjson: no file yet for 2026-09-24" in text
+
+
+def test_captures_dir_honours_env_and_defaults_to_home(tmp_path):
+    from tools.givcap_status import captures_dir
+    assert captures_dir({"CAPTURES_DIR": str(tmp_path)}) == tmp_path
+    assert captures_dir({}) == Path.home() / "captures"

@@ -58,5 +58,10 @@ systemctl enable givcap-wire.service givcap-mqtt.service givcap-compress.timer
 systemctl start givcap-compress.timer
 systemctl restart givcap-mqtt.service
 # The wire logger only starts when /dev/rs485 exists; udev starts it when the dongle is plugged in.
-systemctl restart givcap-wire.service || echo "givcap-wire will start when the dongle is plugged in."
+# --no-block so setup doesn't wait out the device timeout if the dongle is missing.
+if [[ -e /dev/rs485 ]]; then
+    systemctl --no-block restart givcap-wire.service
+else
+    echo "No /dev/rs485 yet: givcap-wire will start when the dongle is plugged in."
+fi
 echo "Done. Check with: givcap-status"
