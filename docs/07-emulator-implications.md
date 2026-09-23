@@ -119,8 +119,8 @@ See [02-holding-registers.md](02-holding-registers.md) for full layout. Key valu
 | 23 | Primary pack current | 0.01 A units, `0x0000` for idle, or read from your real battery.  If emulating multiple battery packs, divide actual current by number of packs |
 | 24 | Battery temperature | In degrees C |
 | 25 | `0x2328` (9000) | Current limit = 90.00 A |
-| 26 | Charge limit in 0.01A | Controls the inverter max charge power (1000 = ~500W) |
-| 27 | Discharge limit in 0.01A | Controls the inverter max discharge power (1000 = ~500W) |
+| 26 | Charge limit in 0.01A | Controls the inverter max charge power (1000 = ~500W). On a G3 LV this may be the discharge limit; see the G3 LV note in [02-holding-registers.md](02-holding-registers.md). |
+| 27 | Discharge limit in 0.01A | Controls the inverter max discharge power (1000 = ~500W). On a G3 LV this may be the charge limit; see the same note. |
 
 ### IR Block 1 (count=21)
 

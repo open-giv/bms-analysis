@@ -161,10 +161,11 @@ Analysis in 2026-09 of A316 with its DSP image D316 shows that the ARM and DSP s
   - The FC=4 IR reads that the ARM asks for, with the count capped at 26.
   - FC=6 writes to BMS registers 1 to 4, sent on counters between polls.
 - **Reply check.** The DSP accepts a reply only when its length matches the function code and its CRC is correct.
-- **Presence.** The first valid reply marks the BMS present and clears the comms fault. The DSP has no multi-reply debounce, unlike the 7-reply debounce reported for a Gen 1 inverter. Whether the ARM adds a delay of its own is not known yet.
+- **Presence.** The first valid reply marks the BMS present and clears the comms fault. The DSP reports this to the ARM, which marks the battery connected as soon as it sees it and logs what looks like a "battery connected" event. Neither chip has a multi-reply debounce, unlike the 7-reply debounce reported for a Gen 1 inverter. When the DSP reports the battery lost, the ARM marks it disconnected and logs what looks like a "battery lost" event.
 - **BMS lost.** After about 30 seconds without a valid reply, the DSP zeroes the charge and discharge current limits and the SoC it holds, and sets the comms fault.
-- **Current limits.** If HR13 (BMS firmware version) is 3011 or higher, the DSP takes the charge limit from HR26 and the discharge limit from HR27. Below 3011, it takes both from HR25. In one mode it raises both limits to at least 8.00 A.
+- **Current limits.** If HR13 (BMS firmware version) is 3011 or higher, the DSP takes its two current limits from HR26 and HR27. Below 3011, it takes both from HR25. In one mode it raises both limits to at least 8.00 A. It scales the HR26 limit down between 48.0 V and 44.0 V, and the HR27 limit down between 54.5 V and about 58.0 V, which suggests HR26 is the discharge limit and HR27 the charge limit on this inverter (see the G3 LV note in [02-holding-registers.md](02-holding-registers.md)).
 - **SoC floor.** The DSP holds a SoC floor that defaults to 4%, the floor seen in wire captures. In one mode it clamps the BMS SoC to between the floor plus 1% and 99%.
+- **Battery voltage.** The DSP measures the battery voltage itself. It uses a fixed maximum of 56.0 V and minimum of 42.0 V, raises an over-voltage fault at 1.0 V or 2.0 V above the maximum, and raises a mismatch fault if its measurement and HR22 differ by more than 5.0 V at low current. No charge voltage taken from BMS data was found.
 
 These results come from firmware analysis and an emulation of the ARM side. They have not been confirmed on the wire yet.
 

@@ -51,6 +51,8 @@ The 28 registers (= 56 bytes) decoded at the byte level:
 | 26  | 52-53 | Charge limit in 0.01A, honoured by Giv inverter | **Cross-charge current target -- charge side** of the pack-pair balancing controller. `*(u16)0x20000142`, written by `compute_pack_current_limits` (flash `0x080167BA`) which iterates the 6 FC4 pack slots, computes per-pack min/max budgets, and runs a ramp-with-hysteresis controller (1 A/call ramp step, 30% of configured max as cap). Tracks HR27 in steady state by conservation (`charge_current = discharge_current` at the coupling point); diverges during transitions because each side has independent ramp + converge logic. |
 | 27  | 54-55 | Discharge limit in 0.01A, honoured by Giv inverter | **Cross-charge current target -- discharge side**. `*(u16)0x20000144`, same writer function as HR26, mirrored logic. |
 
+**G3 LV note on HR26 and HR27.** Firmware analysis of the Hybrid Gen3 LV DSP (D316) suggests the opposite roles on that inverter. The DSP scales the limit it reads from HR26 down as its measured battery voltage falls from 48.0 V to 44.0 V, and the limit it reads from HR27 down as the voltage rises from 54.5 V to about 58.0 V. A low-voltage taper fits a discharge limit, and a high-voltage taper fits a charge limit. Ken's test (see the table at the end of this page) found that HR26 limits charging, possibly on a different inverter model. On a G3 LV this needs a test before relying on either label. An emulator can avoid the question by setting HR26 and HR27 to the same value until it is settled.
+
 ### Register 15 Bits
 
 3-bit OR-mask derived from three independent SRAM bytes. All bits empirically confirmed by toggling each source byte in firmware-execution and observing the resulting HR15 value.
