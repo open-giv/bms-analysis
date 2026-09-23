@@ -159,7 +159,7 @@ At the same poll that the current dropped to zero, HR19 bit 3 (0-indexed) starte
 
 ### Gaps in this capture
 
-The joined parquet file doesn't include HR20, HR21, HR22, HR24, HR26 or HR27, so this capture can't show how they behave. The raw wire log is needed for those.
+The joined parquet file doesn't include HR20, HR21, HR22, HR24, HR26 or HR27, because the decoder didn't extract them when it was made. The decoder now does, so rerunning `join_streams.py` on the raw wire log adds them.
 
 ## Capture experiments worth running
 
