@@ -26,7 +26,7 @@ def _s16_be(data: bytes, offset: int) -> int:
 # Names follow the firmware source mapping in docs/02-holding-registers.md.
 # Evidence levels say how far each meaning has been checked against real wire
 # data, because the firmware analysis was done on BMS v3022 and G3 batteries
-# can run other versions (the 66-hour G3 capture reports v4009):
+# can run other versions (the 90-hour G3 capture reports v4009):
 #   "confirmed on wire"  - wire data shows the bit following this meaning
 #   "consistent"         - wire data fits this meaning but never fully tests it
 #   "firmware only"      - never changed in any capture; name is from firmware
