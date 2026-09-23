@@ -192,3 +192,4 @@ To reproduce on your own system:
 3. Optionally run a 30-45 minute active session forcing high-SoC dwell, low-SoC dwell, and current-limit changes.
 4. Run `tools/join_streams.py` to produce the parquet.
 5. Open `tools/analysis_template.ipynb`, point it at your capture directory, and work through each unknown section.
+6. Run `python tools/capture_checks.py joined.parquet` for the three G3 LV checks: which of HR26/HR27 the current follows, the end-of-charge taper, and cold-boot acceptance time. Capture a full charge, a discharge to the SoC floor and at least one inverter power cycle to give it something to find.
