@@ -157,7 +157,7 @@ Analysis in 2026-09 of A316 with its DSP image D316 shows that the ARM and DSP s
 
 - **Internal link.** The ARM and DSP exchange 45-byte frames over UART4 at 9600 baud, each with a Modbus CRC. The ARM puts its BMS read requests (device, FC, start, count) into these frames, and the DSP returns the raw Modbus replies in them.
 - **The DSP is the Modbus master.** Every frame on the BMS bus comes from the DSP, and all of them are addressed to device 1:
-  - The FC=3 HR poll every 240 ms: either HR0 to HR27 (start 0, count 28) or HR17 to HR25 only (start 17, count 9). The ARM chooses which.
+  - The FC=3 HR poll every 240 ms: either HR0 to HR27 (start 0, count 28) or HR17 to HR25 only (start 17, count 9). The ARM chooses which (see the table below).
   - The FC=4 IR reads that the ARM asks for, with the count capped at 26.
   - FC=6 writes to BMS registers 1 to 4, sent on counters between polls.
 - **Reply check.** The DSP accepts a reply only when its length matches the function code and its CRC is correct.
@@ -166,6 +166,22 @@ Analysis in 2026-09 of A316 with its DSP image D316 shows that the ARM and DSP s
 - **Current limits.** If HR13 (BMS firmware version) is 3011 or higher, the DSP takes its two current limits from HR26 and HR27. Below 3011, it takes both from HR25. In one mode it raises both limits to at least 8.00 A. It scales the HR26 limit down between 48.0 V and 44.0 V, and the HR27 limit down between 54.5 V and about 58.0 V, which suggests HR26 is the discharge limit and HR27 the charge limit on this inverter (see the G3 LV note in [02-holding-registers.md](02-holding-registers.md)).
 - **SoC floor.** The DSP holds a SoC floor that defaults to 4%, the floor seen in wire captures. In one mode it clamps the BMS SoC to between the floor plus 1% and 99%.
 - **Battery voltage.** The DSP measures the battery voltage itself. It uses a fixed maximum of 56.0 V and minimum of 42.0 V, raises an over-voltage fault at 1.0 V or 2.0 V above the maximum, and raises a mismatch fault if its measurement and HR22 differ by more than 5.0 V at low current. No charge voltage taken from BMS data was found.
+
+#### Inverter settings that change the BMS link
+
+The ARM passes some of its own settings to the DSP in the UART4 frames. I traced each one from the DSP variable back to the inverter holding register that sets it, by emulating the ARM's frame builder and its register-write handler. The register names are from [givenergy-modbus](https://github.com/dewet22/givenergy-modbus).
+
+| DSP behaviour | Inverter register |
+|---|---|
+| Full HR0 to HR27 poll (1) or short HR17 to HR25 poll (any other value) | HR109 `enable_bms_read`, 1 by default |
+| SoC clamp to floor + 1% .. 99%, and both current limits held at 8.00 A or more | HR29 `battery_calibration_stage`, non-zero only while a battery calibration runs |
+| SoC floor | HR110 `battery_soc_reserve`, replaced by a per-slot value inside timed slots |
+| Cap on the HR26 limit | HR112 `battery_discharge_limit` |
+| Cap on the HR27 limit | HR111 `battery_charge_limit` |
+
+I checked the last two rows by running the DSP's limit code in Ghidra's emulator with one cap lowered at a time. Lowering the `battery_discharge_limit` cap lowers only the HR26 path, and lowering the `battery_charge_limit` cap lowers only the HR27 path. Together with the voltage tapers above, this is a second sign that this inverter treats HR26 as the discharge limit and HR27 as the charge limit.
+
+For a battery emulator, leave HR109 at 1. Otherwise the emulator also has to answer the short HR17 to HR25 poll.
 
 These results come from firmware analysis and an emulation of the ARM side. They have not been confirmed on the wire yet.
 
