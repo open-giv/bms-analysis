@@ -106,7 +106,7 @@ See [02-holding-registers.md](02-holding-registers.md) for full layout. Key valu
 | 10 | `0xFFFF` | Reserved |
 | 11 | Total Ah of batteries online | Should normally be a fixed value based on actual capacity of batteries.  Can change if pack goes 'offline'. |
 | 12 | `0x0030` (48) | Hardware-rev constant |
-| 13 | `0x0BCE` (3022) | Firmware version - claim BMS 3022 |
+| 13 | `0x0BCE` (3022) | Firmware version - claim BMS 3022. A G3 LV inverter reads the charge and discharge limits from HR26/27 only when this is 3011 or higher; below that it uses HR25 for both. |
 | 14 | `0x0000` | Status flag |
 | 15 | `0x0000` | 3-flag composite |
 | 16 | `0x0000` | Mode/state |
