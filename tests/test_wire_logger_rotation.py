@@ -33,7 +33,8 @@ def test_logger_switches_daily_file_at_utc_midnight(tmp_path):
 
     now = int(time.time())
     midnight = (now // 86400 + 1) * 86400
-    offset = midnight - 2 - now
+    lead = 5                                   # logger clock starts this many seconds before midnight
+    offset = midnight - lead - now
     template = str(tmp_path / "%Y-%m-%d" / "wire.log")
 
     master, slave = pty.openpty()
@@ -41,9 +42,15 @@ def test_logger_switches_daily_file_at_utc_midnight(tmp_path):
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             env={**os.environ, "LOGGER_CLOCK_OFFSET_S": str(offset)})
     try:
-        time.sleep(0.3)
+        # Wait for the logger to open the first day's file rather than a fixed sleep, then write
+        # BEFORE while its clock is still before midnight and AFTER once it is past.
+        day1_file = tmp_path / _utc_day(midnight - 1) / "wire.log"
+        deadline = time.time() + lead - 1
+        while time.time() < deadline and not day1_file.exists():
+            time.sleep(0.02)
+        assert day1_file.exists(), "logger did not start before its clock reached midnight"
         os.write(master, BEFORE)
-        time.sleep(2.5)
+        time.sleep(max(0.0, now + lead + 1.0 - time.time()))
         os.write(master, AFTER)
         time.sleep(0.5)
     finally:
