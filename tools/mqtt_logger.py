@@ -7,11 +7,18 @@ writes one record holding all of them:
     {"ts": "<UTC ISO 8601>", "fields": {...}}
 
 Full snapshots matter: join_streams takes the last TCP record before each
-wire frame, so a record with one field would blank every other column.
+wire frame, so a record with one field would blank every other column. For
+the same reason, after a restart the logger holds its first snapshot until
+it has every field of the last record on disk, or for at most WARMUP_S.
+
+If no message arrives for MQTT_STALL_S seconds (default 600), e.g. because
+paho's network thread has died, the logger exits with status 1 so systemd
+restarts it.
 
 Configuration comes from environment variables (see capture-box/mqtt.env.example):
     MQTT_HOST, MQTT_PORT (default 1883), MQTT_USER, MQTT_PASSWORD,
-    MQTT_TOPIC_PREFIX, GIVCAP_TCP_PATH (strftime template, UTC date).
+    MQTT_TOPIC_PREFIX, MQTT_STALL_S (default 600),
+    GIVCAP_TCP_PATH (strftime template, UTC date).
 
 Run: python tools/mqtt_logger.py   (needs paho-mqtt; pip install '.[capture]')
 """
@@ -22,7 +29,7 @@ import re
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Mapping
 
@@ -33,6 +40,7 @@ TOPIC_TO_FIELD: dict[str, str] = {}
 
 DEFAULT_PATH = "~/captures/%Y-%m-%d/tcp.ndjson"
 REQUIRED_ENV = ("MQTT_HOST", "MQTT_USER", "MQTT_PASSWORD", "MQTT_TOPIC_PREFIX")
+WARMUP_S = 120.0
 
 
 def field_name(topic: str, prefix: str) -> str:
@@ -67,15 +75,60 @@ def parse_payload(payload: bytes):
     return value if math.isfinite(value) else None
 
 
-class SnapshotWriter:
-    """Holds the latest value per field and appends full snapshots to a daily file."""
+def last_field_names(path: Path) -> set:
+    """Field names of the last complete record in an NDJSON file, or an empty set."""
+    try:
+        lines = Path(path).read_text().splitlines()
+    except OSError:
+        return set()
+    for line in reversed(lines):
+        try:
+            return set(json.loads(line)["fields"])
+        except (ValueError, KeyError, TypeError):
+            continue                      # a line cut off by a power loss
+    return set()
 
-    def __init__(self, path_template: str, min_interval_s: float = 1.0):
+
+def expected_fields(path_template: str, now: datetime) -> set:
+    """Fields the first snapshot should wait for: today's last record, else yesterday's."""
+    for day in (now, now - timedelta(days=1)):
+        names = last_field_names(Path(day.strftime(path_template)))
+        if names:
+            return names
+    return set()
+
+
+class Watchdog:
+    """Says when no message has arrived for stall_s seconds. Times are time.monotonic() values."""
+
+    def __init__(self, stall_s: float, now: float):
+        self.stall_s = stall_s
+        self._last = now
+
+    def feed(self, now: float) -> None:
+        self._last = now
+
+    def stalled(self, now: float) -> bool:
+        return now - self._last >= self.stall_s
+
+
+class SnapshotWriter:
+    """Holds the latest value per field and appends full snapshots to a daily file.
+
+    The first snapshot waits until every name in expected_fields has a value, or until
+    warmup_s after the first chance to write, whichever comes first.
+    """
+
+    def __init__(self, path_template: str, min_interval_s: float = 1.0,
+                 expected_fields: set = frozenset(), warmup_s: float = WARMUP_S):
         self.path_template = path_template
         self.min_interval_s = min_interval_s
+        self.expected_fields = set(expected_fields)
+        self.warmup_s = warmup_s
         self._fields: dict = {}
         self._dirty = False
         self._last_write: datetime | None = None
+        self._warm_since: datetime | None = None
         self._lock = threading.Lock()
 
     def update(self, name: str, value) -> None:
@@ -92,7 +145,13 @@ class SnapshotWriter:
         with self._lock:
             if not self._dirty:
                 return False
-            if self._last_write is not None and (now - self._last_write).total_seconds() < self.min_interval_s:
+            if self._last_write is None:
+                if self._warm_since is None:
+                    self._warm_since = now
+                waited = (now - self._warm_since).total_seconds()
+                if not self.expected_fields <= self._fields.keys() and waited < self.warmup_s:
+                    return False
+            elif (now - self._last_write).total_seconds() < self.min_interval_s:
                 return False
             record = {"ts": now.isoformat(), "fields": dict(self._fields)}
             self._dirty = False
@@ -115,6 +174,7 @@ def load_config(env: Mapping[str, str]) -> dict:
         "password": env["MQTT_PASSWORD"],
         "prefix": env["MQTT_TOPIC_PREFIX"].rstrip("/"),
         "path": env.get("GIVCAP_TCP_PATH", DEFAULT_PATH),
+        "stall_s": int(env.get("MQTT_STALL_S", "600")),
     }
 
 
@@ -122,7 +182,9 @@ def main() -> None:
     import paho.mqtt.client as mqtt
 
     cfg = load_config(os.environ)
-    writer = SnapshotWriter(os.path.expanduser(cfg["path"]))
+    path = os.path.expanduser(cfg["path"])
+    writer = SnapshotWriter(path, expected_fields=expected_fields(path, datetime.now(timezone.utc)))
+    watchdog = Watchdog(cfg["stall_s"], time.monotonic())
     prefix = cfg["prefix"]
 
     def on_connect(client, userdata, flags, reason_code, properties):
@@ -133,6 +195,7 @@ def main() -> None:
         print(f"mqtt_logger: subscribed to {prefix}/#", file=sys.stderr)
 
     def on_message(client, userdata, msg):
+        watchdog.feed(time.monotonic())
         writer.update(field_name(msg.topic, prefix), parse_payload(msg.payload))
 
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="givcap-mqtt-logger")
@@ -143,13 +206,15 @@ def main() -> None:
     client.connect_async(cfg["host"], cfg["port"])
     client.loop_start()
     try:
-        while True:
+        while not watchdog.stalled(time.monotonic()):
             writer.maybe_write(datetime.now(timezone.utc))
             time.sleep(0.2)
     except KeyboardInterrupt:
-        pass
+        return
     finally:
         client.loop_stop()
+    print(f"mqtt_logger: no message for {cfg['stall_s']} s, exiting so systemd restarts me", file=sys.stderr)
+    sys.exit(1)
 
 
 if __name__ == "__main__":

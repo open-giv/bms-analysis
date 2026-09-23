@@ -116,7 +116,7 @@ def test_load_config_reads_env_with_defaults():
     cfg = load_config({"MQTT_HOST": "ha.local", "MQTT_USER": "givcap",
                        "MQTT_PASSWORD": "pw", "MQTT_TOPIC_PREFIX": "GivEnergy/"})
     assert cfg == {"host": "ha.local", "port": 1883, "user": "givcap", "password": "pw",
-                   "prefix": "GivEnergy", "path": "~/captures/%Y-%m-%d/tcp.ndjson"}
+                   "prefix": "GivEnergy", "path": "~/captures/%Y-%m-%d/tcp.ndjson", "stall_s": 600}
 
 
 def test_load_config_names_every_missing_variable():
@@ -140,3 +140,75 @@ def test_join_streams_survives_mixed_type_tcp_column(tmp_path):
     assert tcp["tcp_mode"].tolist() == ["Eco", "Eco", "Timed"]
     wire = pd.DataFrame([{"ts": pd.Timestamp("2026-09-24 12:00:01.5", tz="UTC"), "fc": 3}])
     join_streams(wire, tcp, pd.DataFrame()).to_parquet(tmp_path / "joined.parquet")
+
+
+# After a restart the logger starts with no values, and GivTCP takes a while to publish every
+# topic again. Snapshots written in that time are partial, and join_streams would blank the
+# missing columns. The writer holds its first snapshot until it has every field the last
+# record on disk had, or until warmup_s has passed.
+
+def test_writer_holds_first_snapshot_until_expected_fields_arrive(tmp_path):
+    w = SnapshotWriter(str(tmp_path / "tcp.ndjson"), expected_fields={"soc", "v_battery"})
+    w.update("soc", 50)
+    assert w.maybe_write(T0) is False
+    w.update("v_battery", 52.1)
+    assert w.maybe_write(T0 + timedelta(seconds=1)) is True
+    assert _records(tmp_path / "tcp.ndjson")[0]["fields"] == {"soc": 50, "v_battery": 52.1}
+
+
+def test_writer_gives_up_waiting_after_warmup(tmp_path):
+    w = SnapshotWriter(str(tmp_path / "tcp.ndjson"), expected_fields={"soc", "gone"}, warmup_s=120)
+    w.update("soc", 50)
+    assert w.maybe_write(T0) is False
+    assert w.maybe_write(T0 + timedelta(seconds=119)) is False
+    assert w.maybe_write(T0 + timedelta(seconds=120)) is True
+
+
+def test_writer_waits_only_once(tmp_path):
+    w = SnapshotWriter(str(tmp_path / "tcp.ndjson"), expected_fields={"soc"})
+    w.update("soc", 50)
+    assert w.maybe_write(T0) is True
+    w.update("new_topic", 1)
+    assert w.maybe_write(T0 + timedelta(seconds=1)) is True
+
+
+def test_last_field_names_reads_last_complete_record(tmp_path):
+    path = tmp_path / "tcp.ndjson"
+    path.write_text(json.dumps({"ts": "x", "fields": {"a": 1}}) + "\n"
+                    + json.dumps({"ts": "y", "fields": {"a": 2, "b": 3}}) + "\n"
+                    + '{"ts": "z", "fie')                      # cut off by a power loss
+    assert mqtt_logger.last_field_names(path) == {"a", "b"}
+
+
+def test_last_field_names_is_empty_for_missing_file(tmp_path):
+    assert mqtt_logger.last_field_names(tmp_path / "none.ndjson") == set()
+
+
+def test_expected_fields_falls_back_to_yesterday(tmp_path):
+    template = str(tmp_path / "%Y-%m-%d" / "tcp.ndjson")
+    day1 = tmp_path / "2026-09-23"
+    day1.mkdir()
+    (day1 / "tcp.ndjson").write_text(json.dumps({"ts": "x", "fields": {"soc": 1}}) + "\n")
+    assert mqtt_logger.expected_fields(template, T0) == {"soc"}
+
+
+# If paho's network thread dies or the broker goes quiet, the logger would run on writing
+# nothing. The watchdog makes it exit so systemd restarts it.
+
+def test_watchdog_trips_after_stall_without_messages():
+    dog = mqtt_logger.Watchdog(stall_s=600, now=0.0)
+    assert not dog.stalled(599.0)
+    assert dog.stalled(600.0)
+
+
+def test_watchdog_resets_on_each_message():
+    dog = mqtt_logger.Watchdog(stall_s=600, now=0.0)
+    dog.feed(500.0)
+    assert not dog.stalled(1000.0)
+    assert dog.stalled(1100.0)
+
+
+def test_load_config_reads_stall_timeout():
+    env = {"MQTT_HOST": "h", "MQTT_USER": "u", "MQTT_PASSWORD": "p", "MQTT_TOPIC_PREFIX": "G"}
+    assert load_config(env)["stall_s"] == 600
+    assert load_config({**env, "MQTT_STALL_S": "90"})["stall_s"] == 90
