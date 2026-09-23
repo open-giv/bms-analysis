@@ -55,7 +55,7 @@ Every value below comes from one Seplos read of PIA and PIB. GivEnergy register 
 | HR10 | `0xFFFF` | Constant |
 | HR11 | Capacity in whole Ah | PIA total capacity / 100. 628 for this battery. |
 | HR12 | `0x0030` | Constant |
-| HR13 | `0x0BCE` (3022) | Constant. Claims a known GivEnergy BMS firmware. |
+| HR13 | `0x0BCE` (3022) | Constant. Claims a known GivEnergy BMS firmware. It must be 3011 or higher: below that, a G3 LV takes both current limits from HR25 and ignores HR26 and HR27. |
 | HR14 to HR16 | `0x0000` | Constant |
 | HR17, HR18 | HR17 +1 each second, HR18 constant | Clock-derived on a real BMS; see [open questions](#open-questions) |
 | HR19 | Status bits | Built from Seplos state, see [HR19](#hr19) |
@@ -68,7 +68,7 @@ Every value below comes from one Seplos read of PIA and PIB. GivEnergy register 
 | HR26 | Charge current limit, 0.01 A | min(PIA recommended max charge current, install cap) x 100 |
 | HR27 | Discharge current limit, 0.01 A | min(PIA recommended max discharge current, install cap) x 100 |
 
-HR26 and HR27 are the main safety controls, because the inverter honours them (see [02-holding-registers.md](02-holding-registers.md)). The Seplos lowers its recommended currents as the pack approaches full or empty, so passing them through lets the Seplos taper the charge. The install cap is a value the installer sets, e.g. the inverter's own battery current rating.
+HR26 and HR27 are the main safety controls, because the inverter honours them (see [02-holding-registers.md](02-holding-registers.md)). Which of the two a G3 LV treats as the charge limit is not settled: its DSP firmware tapers HR26 at low voltage and HR27 at high voltage, the opposite of the labels in the table above (see the G3 LV note in `docs/02`). Until a test settles it, send the lower of the two Seplos limits in both registers. The Seplos lowers its recommended currents as the pack approaches full or empty, so passing them through lets the Seplos taper the charge. The install cap is a value the installer sets, e.g. the inverter's own battery current rating.
 
 ### HR19
 
@@ -139,15 +139,16 @@ Either way, the emulator must be powered from a supply that stays up when the in
 
 These must be answered before a real Seplos battery is connected to the inverter. Most can be answered with captures from a G3 running its original GivEnergy battery (see [06-wire-captures.md](06-wire-captures.md#capture-experiments-worth-running)).
 
-1. **Charge voltage.** None of the mapped registers sets the voltage the inverter charges to. What voltage does a G3 hold near full charge with a GivEnergy battery, and does it stay below the Seplos limits for this pack? Capture the end of a full charge and record HR22, HR26 and the inverter's reported battery voltage.
+1. **Charge voltage.** None of the mapped registers sets the voltage the inverter charges to. What voltage does a G3 hold near full charge with a GivEnergy battery, and does it stay below the Seplos limits for this pack? Capture the end of a full charge and record HR22, HR26 and the inverter's reported battery voltage. Firmware analysis of the G3 LV DSP found no charge voltage taken from the BMS. The DSP uses a fixed maximum of 56.0 V, raises over-voltage faults at 57.0 V and 58.0 V on its own measurement, and tapers one of the current limits between 54.5 V and about 58.0 V (see [05-inverter-firmware.md](05-inverter-firmware.md#a316-the-dsp-runs-the-bms-bus)). A capture of the end of a full charge is still needed to see the voltage it actually holds.
 2. **Large single-pack capacity.** Does a G3 accept one pack that reports 628 Ah? GivEnergy packs report 186 Ah each. The fallback is to present the battery as several virtual packs on devices 1 to 4, dividing the capacity between them. HR23 then carries the current per pack (see HR23 in [02-holding-registers.md](02-holding-registers.md)).
 3. **Seplos port for the reader.** The sources confirm Modbus RTU at 19200 baud but don't say which physical port an external reader should use: the inverter port in RS485 mode, or a link port. With more than one pack, the host BMS is the master on the link bus, which affects this.
 4. **Seplos current sign and temperature offset.** Check the current sign (positive for charge or discharge) and the 2731 temperature offset against a clamp meter and a thermometer before trusting the mapping.
-5. **Startup check on a G3.** A Gen 1 inverter needs 7 good replies in a row before it accepts a battery (issue #15). Nobody has captured a G3 cold boot yet.
-6. **Battery lost.** What does a G3 do when device 1 stops answering? It should stop using the battery and raise a fault, but this hasn't been seen on the wire.
+5. **Startup check on a G3.** A Gen 1 inverter needs 7 good replies in a row before it accepts a battery (issue #15). Firmware analysis of the G3 LV shows no such debounce on either chip: the first reply with the right length and CRC marks the battery present and connected (see [05-inverter-firmware.md](05-inverter-firmware.md#a316-the-dsp-runs-the-bms-bus)). Nobody has captured a G3 cold boot yet to confirm it.
+6. **Battery lost.** Firmware analysis of the G3 LV DSP shows that after about 30 seconds without a valid reply it zeroes the charge and discharge limits and the SoC it holds, and raises a comms fault. The emulator's own stale-data cut-off (10 s above) triggers well before that. This hasn't been seen on the wire yet.
 7. **Serial and HR17/HR18.** Does the inverter check the battery serial or the HR17/HR18 values? HR17 turns out to be clock-derived: in the G3 capture it changed once per second, mostly by +1 (see [02-holding-registers.md](02-holding-registers.md)), so the emulator should tick it once per second. dobberzzr's emulator used a GivEnergy-style serial (`DX2319G000`) and was accepted on a Gen 1.
 8. **HR20 alarm mapping.** Which Seplos alarms should set which HR20 bits, and how does the G3 react to each one?
 9. **Inverter current rating.** What battery current does the G3 5 kW draw at full power? The G3 3.6 kW peaked at 76 A discharging and 65 A charging in the 90-hour capture.
+10. **HR26 and HR27 roles on a G3 LV.** The DSP firmware suggests HR26 acts as the discharge limit and HR27 as the charge limit, the opposite of `docs/02`. Test by charging with HR26 and HR27 set to different values and seeing which one the inverter follows.
 
 ## Test plan
 

@@ -106,7 +106,7 @@ See [02-holding-registers.md](02-holding-registers.md) for full layout. Key valu
 | 10 | `0xFFFF` | Reserved |
 | 11 | Total Ah of batteries online | Should normally be a fixed value based on actual capacity of batteries.  Can change if pack goes 'offline'. |
 | 12 | `0x0030` (48) | Hardware-rev constant |
-| 13 | `0x0BCE` (3022) | Firmware version - claim BMS 3022 |
+| 13 | `0x0BCE` (3022) | Firmware version - claim BMS 3022. A G3 LV inverter reads the charge and discharge limits from HR26/27 only when this is 3011 or higher; below that it uses HR25 for both. |
 | 14 | `0x0000` | Status flag |
 | 15 | `0x0000` | 3-flag composite |
 | 16 | `0x0000` | Mode/state |
@@ -119,8 +119,8 @@ See [02-holding-registers.md](02-holding-registers.md) for full layout. Key valu
 | 23 | Primary pack current | 0.01 A units, `0x0000` for idle, or read from your real battery.  If emulating multiple battery packs, divide actual current by number of packs |
 | 24 | Battery temperature | In degrees C |
 | 25 | `0x2328` (9000) | Current limit = 90.00 A |
-| 26 | Charge limit in 0.01A | Controls the inverter max charge power (1000 = ~500W) |
-| 27 | Discharge limit in 0.01A | Controls the inverter max discharge power (1000 = ~500W) |
+| 26 | Charge limit in 0.01A | Controls the inverter max charge power (1000 = ~500W). On a G3 LV this may be the discharge limit; see the G3 LV note in [02-holding-registers.md](02-holding-registers.md). |
+| 27 | Discharge limit in 0.01A | Controls the inverter max discharge power (1000 = ~500W). On a G3 LV this may be the charge limit; see the same note. |
 
 ### IR Block 1 (count=21)
 
