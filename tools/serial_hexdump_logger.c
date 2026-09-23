@@ -236,6 +236,9 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Logging %s at 9600 baud to %s\n", serial_device, log_template);
     fprintf(stderr, "Press Ctrl+C to stop.\n");
 
+    /* Non-zero on any exit other than a stop signal, so systemd logs a failure. */
+    int exit_code = 0;
+
     while (!g_stop) {
         ssize_t bytes_read = read(serial_fd, buffer, sizeof(buffer));
 
@@ -243,6 +246,7 @@ int main(int argc, char *argv[])
             now_utc(&now);
             if (ensure_log_open(&log_file, current_path, sizeof(current_path), log_template, now.tv_sec) != 0) {
                 perror("open log file");
+                exit_code = 1;
                 break;
             }
             log_hexdump(log_file, buffer, bytes_read, &total_bytes, &now);
@@ -250,7 +254,10 @@ int main(int argc, char *argv[])
         }
 
         if (bytes_read == 0) {
-            continue;
+            /* With VMIN=1, a 0-byte read means the device hung up (e.g. the dongle was unplugged). */
+            fprintf(stderr, "serial device hung up\n");
+            exit_code = 1;
+            break;
         }
 
         if (errno == EINTR) {
@@ -258,6 +265,7 @@ int main(int argc, char *argv[])
         }
 
         perror("read serial");
+        exit_code = 1;
         break;
     }
 
@@ -265,5 +273,5 @@ int main(int argc, char *argv[])
         fclose(log_file);
     }
     close(serial_fd);
-    return 0;
+    return exit_code;
 }
