@@ -48,7 +48,7 @@ The exact CAN IDs and field layouts are documented in publicly available Pylonte
 
 **Bridge unit conversion notes:**
 
-- GivEnergy Block 2 capacity values are in 0.1 Ah units (e.g. `0x48A8` = 18600 = 186.00 Ah). Pylontech CAN expects Ah.
+- GivEnergy Block 2 capacity values are in 0.01 Ah units (e.g. `0x48A8` = 18600 = 186.00 Ah). Pylontech CAN expects Ah.
 - GivEnergy reg 25 current limit is 0.01 A units (90.00 A). Pylontech CAN expects 0.1 A.
 - Cell voltages from GivEnergy IR Block 3 are raw mV. Pylontech CAN min/max cell voltages are 1 mV units - direct passthrough.
 - SoC from GivEnergy Block 2 byte 25 is direct % - direct passthrough.
@@ -151,9 +151,9 @@ Mapping GivEnergy register fields to fields the bridge must produce:
 | Byte 0 = cell count | typically passthrough |
 | Bytes 1-2 = cycle count | passthrough |
 | Bytes 7-8 = pack voltage (0.001 V) | Pylontech CAN: `BatteryVoltage` in 0.01 V. Convert: divide by 10. |
-| Bytes 15-16 = calibrated capacity (0.1 Ah) | Pylontech CAN: `RatedCapacity` in 0.1 Ah - direct passthrough. |
-| Bytes 19-20 = design capacity (0.1 Ah) | optional - Pylontech CAN reports nominal capacity which is design capacity. |
-| Bytes 23-24 = remaining capacity (0.1 Ah) | useful for SoC calculation: `SoC = remaining / calibrated x 100` |
+| Bytes 15-16 = calibrated capacity (0.01 Ah) | Pylontech CAN: `RatedCapacity` in 0.1 Ah - divide by 10. |
+| Bytes 19-20 = design capacity (0.01 Ah) | optional - Pylontech CAN reports nominal capacity which is design capacity. |
+| Bytes 23-24 = remaining capacity (0.01 Ah) | useful for SoC calculation: `SoC = remaining / calibrated x 100` |
 | Byte 25 = SoC % | Pylontech CAN: `SoC` direct. |
 
 ### From IR Block 3

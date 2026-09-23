@@ -111,9 +111,9 @@ There's no special boot probe or handshake - the inverter just immediately begin
 
 Ken's setup has 2 batteries (devices 1 and 2). The inverter still polls devices 3, 4, 5 - and gets back specific empty-but-valid responses. See [03-input-registers.md](03-input-registers.md) for the byte-level pattern.
 
-## Findings from a 66-hour G3 capture
+## Findings from a 90-hour G3 capture
 
-@af987 captured a GivEnergy G3 Hybrid 3.6 kW inverter with one 9.5 kWh battery (PR #14). The capture ran from 21 to 25 August 2026, about 66 hours, and covers 1.35 million request and response pairs. It includes the RS485 wire stream and a 1 Hz `tcp_poller.py` stream from the same system, joined with `tools/join_streams.py`.
+@af987 captured a GivEnergy G3 Hybrid 3.6 kW inverter with one 9.5 kWh battery (PR #14). The capture ran from 21 to 25 August 2026, about 90 hours, and covers 1.35 million request and response pairs. It includes the RS485 wire stream and a 1 Hz `tcp_poller.py` stream from the same system, joined with `tools/join_streams.py`.
 
 ### Timestamp alignment
 
@@ -161,7 +161,7 @@ At the same poll that the current dropped to zero, HR19 bit 3 (0-indexed) starte
 
 ### Gaps in this capture
 
-The joined parquet file doesn't include HR20, HR21, HR22, HR24, HR26 or HR27, so this capture can't show how they behave. The raw wire log is needed for those.
+The joined parquet file doesn't include HR20, HR21, HR22, HR24, HR26 or HR27, because the decoder didn't extract them when it was made. The decoder now does, so rerunning `join_streams.py` on the raw wire log adds them.
 
 ## Capture experiments worth running
 
@@ -194,3 +194,4 @@ To reproduce on your own system:
 3. Optionally run a 30-45 minute active session forcing high-SoC dwell, low-SoC dwell, and current-limit changes.
 4. Run `tools/join_streams.py` to produce the parquet.
 5. Open `tools/analysis_template.ipynb`, point it at your capture directory, and work through each unknown section.
+6. Run `python tools/capture_checks.py joined.parquet` for the three G3 LV checks: which of HR26/HR27 the current follows, the end-of-charge taper, and cold-boot acceptance time. Capture a full charge, a discharge to the SoC floor and at least one inverter power cycle to give it something to find.
