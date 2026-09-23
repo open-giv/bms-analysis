@@ -70,3 +70,20 @@ def test_compress_syncs_gz_to_disk_before_removing_source(tmp_path):
     at_sync = marker.read_text().split()
     assert "wire.log" in at_sync and "wire.log.gz" in at_sync  # both present when sync ran
     assert sorted(p.name for p in old.iterdir()) == ["tcp.ndjson.gz", "wire.log.gz"]
+
+
+def test_compress_carries_on_past_a_failed_file_and_exits_non_zero(tmp_path):
+    captures = tmp_path / "captures"
+    bad = _day(captures, "2026-09-22")
+    good = _day(captures, "2026-09-23")
+    (bad / "wire.log").chmod(0)                       # gzip can't read it
+    try:
+        result = subprocess.run(["bash", str(SCRIPT)],
+                                env={"CAPTURES_DIR": str(captures), "TODAY": "2026-09-24", "PATH": "/usr/bin:/bin"})
+    finally:
+        (bad / "wire.log").chmod(0o644)
+    assert result.returncode != 0
+    assert (bad / "wire.log").read_text() == "line\n"   # source kept
+    assert not (bad / "wire.log.gz").exists()           # no partial .gz left behind
+    assert sorted(p.name for p in bad.iterdir()) == ["tcp.ndjson.gz", "wire.log"]
+    assert sorted(p.name for p in good.iterdir()) == ["tcp.ndjson.gz", "wire.log.gz"]
