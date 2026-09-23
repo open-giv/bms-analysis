@@ -47,6 +47,7 @@ The original empirical analysis - hardware setup, RS485 captures, raw hex traces
 | [tools/decode_fields.py](tools/decode_fields.py) | Field-level decoder: takes a parsed Modbus response frame and returns a dict of named BMS fields per `docs/02` and `docs/03`. |
 | [tools/pace_reference.py](tools/pace_reference.py) | Reference data for PACE / Pylontech v2.5 protocol fields and bit positions. Used by analysis notebooks to test PACE hypotheses against decoded GivEnergy fields. |
 | [tools/join_streams.py](tools/join_streams.py) | Time-align wire + TCP + tag streams from a campaign into a single parquet for analysis. |
+| [tools/capture_checks.py](tools/capture_checks.py) | Runs three checks on a joined capture: which of HR26/HR27 the charge and discharge current follows, charging current by pack voltage near full, and the time from the first poll to battery current after each cold boot. |
 | [tools/redact.py](tools/redact.py) | Privacy filter -- strips configured serials and IPs from capture artefacts before sharing. Reads `~/.givenergy-redact.toml` or env vars. |
 | [tools/build_notebook.py](tools/build_notebook.py) | Generates `analysis_template.ipynb`, the per-campaign analysis scaffold. |
 | [tools/analysis_template.ipynb](tools/analysis_template.ipynb) | Jupyter starting point for analysing a campaign capture -- PACE-hypothesis-first per-unknown sections. |
