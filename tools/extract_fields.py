@@ -29,6 +29,7 @@ Output format:
     - Consecutive duplicate rows (identical data cells) are suppressed.
 """
 import csv
+import gzip
 import re
 import sys
 from datetime import datetime
@@ -48,11 +49,22 @@ def crc16(data):
     return crc & 0xFFFF
 
 
+def open_capture(path):
+    """Open a capture file for reading as text, gzipped (as givcap-compress leaves it) or not.
+
+    Goes by the gzip magic bytes, not the name, so redact.py's default output
+    (wire.log.gz.redacted) reads too.
+    """
+    with open(path, "rb") as f:
+        gzipped = f.read(2) == b"\x1f\x8b"
+    return gzip.open(path, "rt") if gzipped else open(path)
+
+
 def load_byte_stream(path):
-    """Read the logger file into (bytes, per-byte timestamps)."""
+    """Read the logger file into (bytes, per-byte timestamps). Reads .gz too."""
     stream = bytearray()
     timestamps = []
-    with open(path) as f:
+    with open_capture(path) as f:
         for line in f:
             m = LINE_RE.match(line.rstrip())
             if not m:
