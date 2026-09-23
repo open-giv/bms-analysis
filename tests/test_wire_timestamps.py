@@ -90,7 +90,11 @@ def test_serial_hexdump_logger_writes_utc_timestamps(tmp_path):
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             env={**os.environ, "TZ": "Europe/London"})
     try:
-        time.sleep(0.3)
+        # The logger opens its log file at start-up, before it reads; wait for that rather than a
+        # fixed sleep, which was too short when the machine was busy.
+        deadline = time.time() + 5
+        while time.time() < deadline and not log.exists():
+            time.sleep(0.02)
         before = datetime.now(timezone.utc)
         os.write(master, HR_REQUEST)
         deadline = time.time() + 3
