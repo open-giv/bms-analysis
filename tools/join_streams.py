@@ -49,7 +49,7 @@ def load_wire_records(wire_path: Path, wire_tz: str | None = None) -> pd.DataFra
 def load_tcp_records(tcp_path: Path) -> pd.DataFrame:
     """Decode tcp.ndjson into a DataFrame, one row per poll, columns prefixed tcp_."""
     rows = []
-    with open(tcp_path) as f:
+    with parse_log.open_capture(tcp_path) as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -68,7 +68,7 @@ def load_tcp_records(tcp_path: Path) -> pd.DataFrame:
 def load_tag_records(tags_path: Path) -> pd.DataFrame:
     """Decode tags.ndjson into a DataFrame of sparse events."""
     rows = []
-    with open(tags_path) as f:
+    with parse_log.open_capture(tags_path) as f:
         for line in f:
             line = line.strip()
             if not line:
