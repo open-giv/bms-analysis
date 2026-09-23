@@ -22,12 +22,24 @@ Captures land in `~/captures/YYYY-MM-DD/` on the Pi, one folder per UTC day. Fin
 3. Clone the repo: `git clone https://github.com/open-giv/bms-analysis.git && cd bms-analysis`
 4. Plug in the dongle and read its IDs: `udevadm info -a -n /dev/ttyUSB0 | grep -E 'idVendor|idProduct|serial'`. Use the first value of each, which belong to the dongle itself.
 5. Run `sudo capture-box/setup.sh VENDOR PRODUCT SERIAL` with those three values.
-6. Edit `/etc/givcap/mqtt.env` (`sudo nano /etc/givcap/mqtt.env`) with your broker address, the Pi's MQTT username and password, and GivTCP's topic prefix. Then run `sudo systemctl restart givcap-mqtt`.
+6. Edit `/etc/givcap/mqtt.env` (`sudo nano /etc/givcap/mqtt.env`) with your broker address, the Pi's MQTT username and password, and GivTCP's topic prefix including the inverter serial (e.g. `GivEnergy/XXXXXXXXXX`), so the serial doesn't end up in column names. Then run `sudo systemctl restart givcap-mqtt`.
 
 ## Check
 
 - `givcap-status` shows whether both loggers are running, how old the last line of each of today's files is, free disk space, and whether the clock is synchronised.
 - `journalctl -u givcap-wire -u givcap-mqtt -n 50` shows recent log messages.
+
+## Try the setup without a Pi
+
+`capture-box/dev/Dockerfile` builds a Debian 13 (trixie) image with systemd, the base of current Raspberry Pi OS. On an arm64 machine it runs natively. It lets you run `setup.sh` and check the services, but not the dongle, because udev can't see a USB device from inside the container.
+
+```
+docker build -t givcap-pi capture-box/dev
+docker run -d --name givcap --privileged --cgroupns=host -v /sys/fs/cgroup:/sys/fs/cgroup:rw -v "$PWD":/src:ro givcap-pi
+docker exec -u givcapuser -w /home/givcapuser givcap git clone -q /src bms-analysis
+docker exec -u givcapuser -w /home/givcapuser/bms-analysis givcap sudo capture-box/setup.sh 0403 6001 TESTSERIAL
+docker exec -u givcapuser givcap givcap-status
+```
 
 ## Copy captures to your computer
 

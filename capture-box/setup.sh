@@ -28,7 +28,8 @@ render() {
 }
 
 apt-get update
-apt-get install -y gcc python3-venv rsync mosquitto-clients
+# systemd-timesyncd provides systemd-time-wait-sync, which the loggers wait for so timestamps are right.
+apt-get install -y gcc python3-venv rsync mosquitto-clients systemd-timesyncd
 
 gcc -O2 -Wall -o /usr/local/bin/serial_hexdump_logger "$REPO/tools/serial_hexdump_logger.c"
 sudo -u "$USER_NAME" python3 -m venv "$REPO/.venv"
