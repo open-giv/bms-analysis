@@ -57,7 +57,7 @@ Every value below comes from one Seplos read of PIA and PIB. GivEnergy register 
 | HR12 | `0x0030` | Constant |
 | HR13 | `0x0BCE` (3022) | Constant. Claims a known GivEnergy BMS firmware. It must be 3011 or higher: below that, a G3 LV takes both current limits from HR25 and ignores HR26 and HR27. |
 | HR14 to HR16 | `0x0000` | Constant |
-| HR17, HR18 | Fixed per-device values | See [open questions](#open-questions) |
+| HR17, HR18 | HR17 +1 each second, HR18 constant | Clock-derived on a real BMS; see [open questions](#open-questions) |
 | HR19 | Status bits | Built from Seplos state, see [HR19](#hr19) |
 | HR20 | Alarm bits | `0x0000` unless a Seplos alarm maps to a documented HR20 bit |
 | HR21 | SoC % | PIA SoC / 10 |
@@ -145,9 +145,9 @@ These must be answered before a real Seplos battery is connected to the inverter
 4. **Seplos current sign and temperature offset.** Check the current sign (positive for charge or discharge) and the 2731 temperature offset against a clamp meter and a thermometer before trusting the mapping.
 5. **Startup check on a G3.** A Gen 1 inverter needs 7 good replies in a row before it accepts a battery (issue #15). Firmware analysis of the G3 LV shows no such debounce on either chip: the first reply with the right length and CRC marks the battery present and connected (see [05-inverter-firmware.md](05-inverter-firmware.md#a316-the-dsp-runs-the-bms-bus)). Nobody has captured a G3 cold boot yet to confirm it.
 6. **Battery lost.** Firmware analysis of the G3 LV DSP shows that after about 30 seconds without a valid reply it zeroes the charge and discharge limits and the SoC it holds, and raises a comms fault. The emulator's own stale-data cut-off (10 s above) triggers well before that. This hasn't been seen on the wire yet.
-7. **Serial and HR17/HR18.** Does the inverter check the battery serial or the HR17/HR18 values? The firmware analysis describes HR17/HR18 as a fixed per-device hash, but HR17 took 28,224 different values in the G3 capture and mostly stepped by 1. dobberzzr's emulator used a GivEnergy-style serial (`DX2319G000`) and was accepted on a Gen 1.
+7. **Serial and HR17/HR18.** Does the inverter check the battery serial or the HR17/HR18 values? HR17 turns out to be clock-derived: in the G3 capture it changed once per second, mostly by +1 (see [02-holding-registers.md](02-holding-registers.md)), so the emulator should tick it once per second. dobberzzr's emulator used a GivEnergy-style serial (`DX2319G000`) and was accepted on a Gen 1.
 8. **HR20 alarm mapping.** Which Seplos alarms should set which HR20 bits, and how does the G3 react to each one?
-9. **Inverter current rating.** What battery current does the G3 5 kW draw at full power? The G3 3.6 kW peaked at 76 A discharging and 65 A charging in the 66-hour capture.
+9. **Inverter current rating.** What battery current does the G3 5 kW draw at full power? The G3 3.6 kW peaked at 76 A discharging and 65 A charging in the 90-hour capture.
 10. **HR26 and HR27 roles on a G3 LV.** The DSP firmware suggests HR26 acts as the discharge limit and HR27 as the charge limit, the opposite of `docs/02`. Test by charging with HR26 and HR27 set to different values and seeing which one the inverter follows.
 
 ## Test plan

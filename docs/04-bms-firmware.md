@@ -107,7 +107,7 @@ The FC=4 handler at `0x0800_DEBC` populates the response from a per-pack structu
 
 **Block 2 fields** (cycles, capacities, pack voltage, SoC, firmware version) all use direct strb without `subw`.
 
-The internal storage bias of `+2730` for temperatures is presumably to keep them as unsigned uint16 (so -30.0 deg C internal = 2400, well above zero). The same bias appears in the inter-pack PACE protocol on UART4. The two Block 3 fields at offsets 32-35 use the same bias: they are the max and min temperature, and the wire value is raw decidegC. The 66-hour G3 capture confirms this, because they match the inverter's reported `t_max` and `t_min` exactly.
+The internal storage bias of `+2730` for temperatures is presumably to keep them as unsigned uint16 (so -30.0 deg C internal = 2400, well above zero). The same bias appears in the inter-pack PACE protocol on UART4. The two Block 3 fields at offsets 32-35 use the same bias: they are the max and min temperature, and the wire value is raw decidegC. The 90-hour G3 capture confirms this, because they match the inverter's reported `t_max` and `t_min` exactly.
 
 **HR reg 24 also uses the bias**, via a separate `subw` at `0x0800_D76A` (writes to the HR table backing store, not to the FC=4 response). It encodes the maximum cell temperature in whole °C, `(max_raw - 2730) / 10`. See [02-holding-registers.md](02-holding-registers.md).
 

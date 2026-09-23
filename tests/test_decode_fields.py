@@ -143,3 +143,27 @@ def test_decode_hr19_charging():
 def test_decode_hr19_at_rest_with_low_cell():
     flags = decode_hr19(198)  # 1100 0110, seen at the 4% floor
     assert flags["all_cells_ok"] is False
+
+
+def test_decode_hr_response_remaining_registers():
+    data = (FIXTURES / "sample_hr_response.bin").read_bytes()
+    fields = decode_hr_response(data)
+    assert fields["hr12_hw_rev"] == 48
+    assert fields["hr13_bms_fw"] == 3022
+    assert fields["hr14_charge_mode_active"] == 0
+    assert fields["hr15_flags"] == 0
+    assert fields["hr16_afe_state"] == 0
+    assert fields["hr18_hash_hi"] == 14493
+    assert fields["hr20_alarms"] == 0
+    assert fields["hr21_soc_pct"] == 95
+    assert fields["hr22_pack_voltage_cV"] == 5311      # 53.11 V
+    assert fields["hr24_max_temp_C"] == 17
+    # Neutral names: which of HR26/HR27 is the charge limit differs by inverter (docs/02 G3 LV note).
+    assert fields["hr26_limit_cA"] == 8370             # 83.70 A
+    assert fields["hr27_limit_cA"] == 8370
+
+
+def test_decode_hr_response_max_temp_is_signed():
+    data = bytearray((FIXTURES / "sample_hr_response.bin").read_bytes())
+    data[48:50] = (-5 & 0xFFFF).to_bytes(2, "big")
+    assert decode_hr_response(bytes(data))["hr24_max_temp_C"] == -5

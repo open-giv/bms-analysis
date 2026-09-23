@@ -1,5 +1,6 @@
 #define _DEFAULT_SOURCE
 #define _POSIX_C_SOURCE 200809L
+#define _DARWIN_C_SOURCE
 
 #include <errno.h>
 #include <fcntl.h>
@@ -114,14 +115,15 @@ static int configure_serial_9600(int fd)
 static void make_timestamp(char *out, size_t out_size)
 {
     struct timespec ts;
-    struct tm tm_local;
+    struct tm tm_utc;
     char base[32];
 
     clock_gettime(CLOCK_REALTIME, &ts);
-    localtime_r(&ts.tv_sec, &tm_local);
-    strftime(base, sizeof(base), "%Y-%m-%d %H:%M:%S", &tm_local);
+    /* UTC with a Z suffix, like serial_hexdump_logger, so logs line up with tcp_poller. */
+    gmtime_r(&ts.tv_sec, &tm_utc);
+    strftime(base, sizeof(base), "%Y-%m-%d %H:%M:%S", &tm_utc);
 
-    snprintf(out, out_size, "%s.%03ld", base, ts.tv_nsec / 1000000L);
+    snprintf(out, out_size, "%s.%03ldZ", base, ts.tv_nsec / 1000000L);
 }
 
 static uint16_t modbus_crc16(const uint8_t *data, size_t len)

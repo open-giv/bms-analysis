@@ -110,8 +110,8 @@ See [02-holding-registers.md](02-holding-registers.md) for full layout. Key valu
 | 14 | `0x0000` | Status flag |
 | 15 | `0x0000` | 3-flag composite |
 | 16 | `0x0000` | Mode/state |
-| 17 | counter that ticks ~once per query | E.g. start at `0x114B` and increment |
-| 18 | `0x389D` | Constant device hash - any plausible value works |
+| 17 | value that changes once per second | A real BMS derives it from its clock, mostly stepping by +1 each second. Incrementing once per second is the closest simple match; whether any inverter checks it is not known. |
+| 18 | `0x389D` | High half of the same clock hash; it changes about every 18 hours. A constant is fine for short runs. |
 | 19 | BMS status (normally `0x00CE` or `0x00CF`) | 8-flag composite, see [02-holding-registers.md](02-holding-registers.md) |
 | 20 | Alarms | normally `0x0000`, see [02-holding-registers.md](02-holding-registers.md) |
 | 21 | Battery state of charge (0%-100%) | If returning SoC |
@@ -146,11 +146,11 @@ See [02-holding-registers.md](02-holding-registers.md) for full layout. Key valu
 [2-byte BE pack voltage 0.001V]     ; e.g. 53.000 V = 0xCEE8
 [2-byte BE pack voltage 0.001V]     ; same value (duplicate readout)
 FF FF FF 35 00 00                  ; mostly fixed pattern
-[2-byte BE calibrated capacity 0.1 Ah]  ; e.g. 0x4BC0 = 193.92 Ah
+[2-byte BE calibrated capacity 0.01 Ah] ; e.g. 0x4BC0 = 193.92 Ah
 00 00
-[2-byte BE design capacity 0.1 Ah]      ; 0x48A8 = 186.00 Ah
+[2-byte BE design capacity 0.01 Ah]     ; 0x48A8 = 186.00 Ah
 00 00
-[2-byte BE remaining capacity 0.1 Ah]   ; computed from SoC x design capacity
+[2-byte BE remaining capacity 0.01 Ah]  ; computed from SoC x design capacity
 [1-byte SoC %]                          ; 0-100
 00 00
 0E 10                              ; constant 3600

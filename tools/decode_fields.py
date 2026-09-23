@@ -26,7 +26,7 @@ def _s16_be(data: bytes, offset: int) -> int:
 # Names follow the firmware source mapping in docs/02-holding-registers.md.
 # Evidence levels say how far each meaning has been checked against real wire
 # data, because the firmware analysis was done on BMS v3022 and G3 batteries
-# can run other versions (the 66-hour G3 capture reports v4009):
+# can run other versions (the 90-hour G3 capture reports v4009):
 #   "confirmed on wire"  - wire data shows the bit following this meaning
 #   "consistent"         - wire data fits this meaning but never fully tests it
 #   "firmware only"      - never changed in any capture; name is from firmware
@@ -54,20 +54,46 @@ def decode_hr_response(data: bytes) -> Dict[str, Any]:
     Byte offsets are per docs/02-holding-registers.md (reg * 2 = byte offset):
       Reg 11 -> bytes 22-23: capacity of batteries online, whole Ah (uint16;
                               stays fixed through a discharge)
+      Reg 12 -> bytes 24-25: hardware revision constant (uint16)
+      Reg 13 -> bytes 26-27: BMS firmware version (uint16; e.g. 3022)
+      Reg 14 -> bytes 28-29: charge mode selector active flag (uint16)
+      Reg 15 -> bytes 30-31: 3-bit flag mask (uint16)
+      Reg 16 -> bytes 32-33: AFE-derived state byte (uint16)
       Reg 17 -> bytes 34-35: dynamic hash (uint16)
+      Reg 18 -> bytes 36-37: high half of the device hash (uint16)
       Reg 19 -> bytes 38-39: composite status/fault bitmask (observed values
                               fit in 8 bits; read as uint16 per register model)
+      Reg 20 -> bytes 40-41: alarm bits (uint16)
+      Reg 21 -> bytes 42-43: state of charge, % (uint16)
+      Reg 22 -> bytes 44-45: pack voltage in centivolts (uint16, 0.01 V)
       Reg 23 -> bytes 46-47: pack current in centi-amps (signed int16, 0.01 A)
+      Reg 24 -> bytes 48-49: maximum cell temperature, whole degC (signed int16)
       Reg 25 -> bytes 50-51: current limit * 100 (uint16)
+      Reg 26 -> bytes 52-53: current limit in centi-amps (uint16)
+      Reg 27 -> bytes 54-55: current limit in centi-amps (uint16)
+    HR26/HR27 have neutral names on purpose: docs/02 labels HR26 charge and
+    HR27 discharge, but G3 LV firmware treats them the other way round.
     """
     if len(data) != 56:
         return {}
     fields: Dict[str, Any] = {
         "hr11_capacity_Ah": _u16_be(data, 22),
+        "hr12_hw_rev": _u16_be(data, 24),
+        "hr13_bms_fw": _u16_be(data, 26),
+        "hr14_charge_mode_active": _u16_be(data, 28),
+        "hr15_flags": _u16_be(data, 30),
+        "hr16_afe_state": _u16_be(data, 32),
         "hr17_dynamic": _u16_be(data, 34),
+        "hr18_hash_hi": _u16_be(data, 36),
         "hr19_status": _u16_be(data, 38),
+        "hr20_alarms": _u16_be(data, 40),
+        "hr21_soc_pct": _u16_be(data, 42),
+        "hr22_pack_voltage_cV": _u16_be(data, 44),
         "hr23_pack_current_cA": _s16_be(data, 46),
+        "hr24_max_temp_C": _s16_be(data, 48),
         "hr25_current_limit": _u16_be(data, 50),
+        "hr26_limit_cA": _u16_be(data, 52),
+        "hr27_limit_cA": _u16_be(data, 54),
     }
     return fields
 
