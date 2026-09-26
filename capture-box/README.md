@@ -20,7 +20,7 @@ Captures land in `~/captures/YYYY-MM-DD/` on the Pi, one folder per UTC day. Fin
 1. Write Raspberry Pi OS Lite (64-bit) to the card with Raspberry Pi Imager. In Imager's settings, set the hostname to `givcap`, your wifi, your username, and SSH with your public key.
 2. Boot the Pi, then from your computer: `ssh givcap.local`.
 3. Clone the repo: `git clone https://github.com/open-giv/bms-analysis.git && cd bms-analysis`
-4. Plug in the dongle and read its IDs: `udevadm info -a -n /dev/ttyUSB0 | grep -E 'idVendor|idProduct|serial'`. Use the first value of each, which belong to the dongle itself.
+4. Plug in the dongle and read its IDs: `udevadm info -a -n /dev/ttyUSB0 | grep -E 'idVendor|idProduct|serial'`. Use the first value of each, which belong to the dongle itself. Dongles with a CH343 or other USB CDC chip (e.g. some Waveshare models) appear as `/dev/ttyACM0` instead, so use that name. `ls /dev/ttyUSB* /dev/ttyACM*` shows which.
 5. Run `sudo capture-box/setup.sh VENDOR PRODUCT SERIAL` with those three values.
 6. Edit `/etc/givcap/mqtt.env` (`sudo nano /etc/givcap/mqtt.env`) with your broker address, the Pi's MQTT username and password, and GivTCP's topic prefix including the inverter serial (e.g. `GivEnergy/XXXXXXXXXX`), so the serial doesn't end up in column names. Then run `sudo systemctl restart givcap-mqtt`.
 

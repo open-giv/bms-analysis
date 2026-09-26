@@ -3,7 +3,7 @@
 # Run from the owner's account inside the cloned repo:
 #   sudo capture-box/setup.sh VENDOR PRODUCT SERIAL
 # Read VENDOR, PRODUCT and SERIAL for the dongle with:
-#   udevadm info -a -n /dev/ttyUSB0 | grep -E 'idVendor|idProduct|serial'
+#   udevadm info -a -n /dev/ttyUSB0 | grep -E 'idVendor|idProduct|serial'  (or /dev/ttyACM0)
 set -euo pipefail
 
 if [[ $EUID -ne 0 ]]; then

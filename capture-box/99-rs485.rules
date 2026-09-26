@@ -1,3 +1,3 @@
 # Waveshare USB to RS485 dongle -> /dev/rs485, and start the wire logger when it appears.
-# setup.sh fills in the IDs. Read them with: udevadm info -a -n /dev/ttyUSB0 | grep -E 'idVendor|idProduct|serial'
+# setup.sh fills in the IDs. Read them with: udevadm info -a -n /dev/ttyUSB0 | grep -E 'idVendor|idProduct|serial'  (or /dev/ttyACM0)
 SUBSYSTEM=="tty", ATTRS{idVendor}=="@VENDOR@", ATTRS{idProduct}=="@PRODUCT@", ATTRS{serial}=="@SERIAL@", SYMLINK+="rs485", TAG+="systemd", ENV{SYSTEMD_WANTS}+="givcap-wire.service"
