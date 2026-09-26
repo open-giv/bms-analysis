@@ -41,6 +41,19 @@ docker exec -u givcapuser -w /home/givcapuser/bms-analysis givcap sudo capture-b
 docker exec -u givcapuser givcap givcap-status
 ```
 
+## Wi-Fi on a mesh network
+
+On the first real box, the Pi 3's built-in Broadcom Wi-Fi went silent while still reporting
+"connected" whenever a mesh access point (Google/Nest Wifi here) sent an 802.11v roaming request
+(`WNM: Preferred List Available` then `brcmf_p2p_send_action_frame: Unknown Frame` in the
+journal). A USB Wi-Fi adapter with a mac80211 driver handles those requests properly. The box now
+uses a TP-Link Archer T3U (RTL8812BU, driver `rtw88_8822bu`) with the built-in Wi-Fi turned off
+(`dtoverlay=disable-wifi` in `/boot/firmware/config.txt`), pinned to 2.4 GHz for range.
+
+If the mesh uses WPA2/WPA3 mixed mode, a USB adapter tries WPA3 (SAE) first, and that needs the
+real passphrase. The hashed key Raspberry Pi Imager saves only works for WPA2. Recreate the
+connection with `sudo nmcli --ask dev wifi connect <SSID> name givcap-wifi`.
+
 ## If the box drops off the network
 
 `setup.sh` keeps the journal on disk and turns on the hardware watchdog, so a hang reboots the Pi
