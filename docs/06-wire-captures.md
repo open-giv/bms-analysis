@@ -38,6 +38,8 @@ Each line shows: timestamp, byte offset into the capture stream, up to 16 hex by
 
 Timestamps are UTC, marked with a trailing `Z`. Logs from older versions of the logger are in the logging machine's local time with no zone marker. `tools/join_streams.py` refuses those unless you pass `--wire-tz` (e.g. `--wire-tz Europe/London`), because joining local time against `tcp_poller.py`'s UTC timestamps shifts every TCP value by the UTC offset.
 
+The log file argument can be a `strftime` template, e.g. `captures/%Y-%m-%d/wire.log`. The logger expands it with the UTC date of each read, and switches to a new file, creating its directory, when the UTC date changes. A plain file name works as before.
+
 Timestamps are when the logger flushed - lines sharing a timestamp are bytes received in the same flush, typically belonging to one Modbus frame. **Note**: occasionally the logger splits a frame across two flushes ~1 ms apart; a parser must handle this (see [`tools/parse_log.py`](../tools/parse_log.py) for a robust approach).
 
 ## Parsing the captures

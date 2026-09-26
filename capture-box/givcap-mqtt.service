@@ -1,0 +1,17 @@
+[Unit]
+Description=GivTCP MQTT snapshot logger
+Wants=time-sync.target network-online.target
+After=time-sync.target network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+EnvironmentFile=/etc/givcap/mqtt.env
+Environment=GIVCAP_TCP_PATH=@HOME@/captures/%%Y-%%m-%%d/tcp.ndjson
+Environment=PYTHONUNBUFFERED=1
+ExecStart=@REPO@/.venv/bin/python @REPO@/tools/mqtt_logger.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -13,11 +13,25 @@
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
+#include <limits.h>
+#include <sys/stat.h>
 
 #define READ_BUFFER_SIZE 256
 #define BYTES_PER_LINE 16
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 static volatile sig_atomic_t g_stop = 0;
+
+/* Test-only clock shift in seconds, from LOGGER_CLOCK_OFFSET_S. */
+static long g_clock_offset_s = 0;
+
+static void now_utc(struct timespec *ts)
+{
+    clock_gettime(CLOCK_REALTIME, ts);
+    ts->tv_sec += g_clock_offset_s;
+}
 
 static void handle_signal(int sig)
 {
@@ -63,21 +77,20 @@ static int configure_serial_9600(int fd)
     return 0;
 }
 
-static void make_timestamp(char *out, size_t out_size)
+static void make_timestamp(char *out, size_t out_size, const struct timespec *ts)
 {
-    struct timespec ts;
     struct tm tm_utc;
     char base[32];
 
     /* UTC with a Z suffix, so the log lines up with tcp_poller's UTC stamps. */
-    clock_gettime(CLOCK_REALTIME, &ts);
-    gmtime_r(&ts.tv_sec, &tm_utc);
+    gmtime_r(&ts->tv_sec, &tm_utc);
     strftime(base, sizeof(base), "%Y-%m-%d %H:%M:%S", &tm_utc);
 
-    snprintf(out, out_size, "%s.%03ldZ", base, ts.tv_nsec / 1000000L);
+    snprintf(out, out_size, "%s.%03ldZ", base, ts->tv_nsec / 1000000L);
 }
 
-static void log_hexdump(FILE *log_file, const unsigned char *buf, ssize_t len, uint64_t *total_bytes)
+static void log_hexdump(FILE *log_file, const unsigned char *buf, ssize_t len, uint64_t *total_bytes,
+                        const struct timespec *ts)
 {
     ssize_t i;
 
@@ -90,7 +103,7 @@ static void log_hexdump(FILE *log_file, const unsigned char *buf, ssize_t len, u
             line_len = BYTES_PER_LINE;
         }
 
-        make_timestamp(timestamp, sizeof(timestamp));
+        make_timestamp(timestamp, sizeof(timestamp), ts);
         fprintf(log_file, "%s  %08llx  ", timestamp, (unsigned long long)(*total_bytes + (uint64_t)i));
 
         for (j = 0; j < BYTES_PER_LINE; ++j) {
@@ -113,18 +126,74 @@ static void log_hexdump(FILE *log_file, const unsigned char *buf, ssize_t len, u
     fflush(log_file);
 }
 
+/* Create every missing parent directory of path, like mkdir -p. */
+static int make_parent_dirs(const char *path)
+{
+    char buf[PATH_MAX];
+    char *p;
+
+    if (snprintf(buf, sizeof(buf), "%s", path) >= (int)sizeof(buf)) {
+        errno = ENAMETOOLONG;
+        return -1;
+    }
+    for (p = buf + 1; *p; ++p) {
+        if (*p != '/') {
+            continue;
+        }
+        *p = '\0';
+        if (mkdir(buf, 0755) != 0 && errno != EEXIST) {
+            return -1;
+        }
+        *p = '/';
+    }
+    return 0;
+}
+
+/* Expand the path template for the UTC date of t, and switch files if it changed. */
+static int ensure_log_open(FILE **log_file, char *current_path, size_t path_size,
+                           const char *template_path, time_t t)
+{
+    struct tm tm_utc;
+    char path[PATH_MAX];
+
+    gmtime_r(&t, &tm_utc);
+    if (strftime(path, sizeof(path), template_path, &tm_utc) == 0) {
+        errno = ENAMETOOLONG;
+        return -1;
+    }
+    if (*log_file != NULL && strcmp(path, current_path) == 0) {
+        return 0;
+    }
+    if (*log_file != NULL) {
+        fclose(*log_file);
+        *log_file = NULL;
+    }
+    if (make_parent_dirs(path) != 0) {
+        return -1;
+    }
+    *log_file = fopen(path, "a");
+    if (*log_file == NULL) {
+        return -1;
+    }
+    snprintf(current_path, path_size, "%s", path);
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     const char *serial_device = "/dev/ttyUSB0";
-    const char *log_path = "serial_hexdump.log";
+    const char *log_template = "serial_hexdump.log";
     int serial_fd;
-    FILE *log_file;
+    FILE *log_file = NULL;
+    char current_path[PATH_MAX] = "";
+    const char *offset_env = getenv("LOGGER_CLOCK_OFFSET_S");
+    struct timespec now;
     struct sigaction sa;
     unsigned char buffer[READ_BUFFER_SIZE];
     uint64_t total_bytes = 0;
 
     if (argc > 3) {
-        fprintf(stderr, "Usage: %s [serial_device] [log_file]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [serial_device] [log_file_or_strftime_template]\n", argv[0]);
         return 1;
     }
 
@@ -132,7 +201,7 @@ int main(int argc, char *argv[])
         serial_device = argv[1];
     }
     if (argc == 3) {
-        log_path = argv[2];
+        log_template = argv[2];
     }
 
     memset(&sa, 0, sizeof(sa));
@@ -140,6 +209,10 @@ int main(int argc, char *argv[])
     sigemptyset(&sa.sa_mask);
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
+
+    if (offset_env != NULL) {
+        g_clock_offset_s = strtol(offset_env, NULL, 10);
+    }
 
     serial_fd = open(serial_device, O_RDONLY | O_NOCTTY);
     if (serial_fd < 0) {
@@ -153,26 +226,38 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    log_file = fopen(log_path, "a");
-    if (log_file == NULL) {
+    now_utc(&now);
+    if (ensure_log_open(&log_file, current_path, sizeof(current_path), log_template, now.tv_sec) != 0) {
         perror("open log file");
         close(serial_fd);
         return 1;
     }
 
-    fprintf(stderr, "Logging %s at 9600 baud to %s\n", serial_device, log_path);
+    fprintf(stderr, "Logging %s at 9600 baud to %s\n", serial_device, log_template);
     fprintf(stderr, "Press Ctrl+C to stop.\n");
+
+    /* Non-zero on any exit other than a stop signal, so systemd logs a failure. */
+    int exit_code = 0;
 
     while (!g_stop) {
         ssize_t bytes_read = read(serial_fd, buffer, sizeof(buffer));
 
         if (bytes_read > 0) {
-            log_hexdump(log_file, buffer, bytes_read, &total_bytes);
+            now_utc(&now);
+            if (ensure_log_open(&log_file, current_path, sizeof(current_path), log_template, now.tv_sec) != 0) {
+                perror("open log file");
+                exit_code = 1;
+                break;
+            }
+            log_hexdump(log_file, buffer, bytes_read, &total_bytes, &now);
             continue;
         }
 
         if (bytes_read == 0) {
-            continue;
+            /* With VMIN=1, a 0-byte read means the device hung up (e.g. the dongle was unplugged). */
+            fprintf(stderr, "serial device hung up\n");
+            exit_code = 1;
+            break;
         }
 
         if (errno == EINTR) {
@@ -180,10 +265,13 @@ int main(int argc, char *argv[])
         }
 
         perror("read serial");
+        exit_code = 1;
         break;
     }
 
-    fclose(log_file);
+    if (log_file != NULL) {
+        fclose(log_file);
+    }
     close(serial_fd);
-    return 0;
+    return exit_code;
 }

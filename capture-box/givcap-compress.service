@@ -1,0 +1,8 @@
+[Unit]
+Description=Compress finished capture days
+
+[Service]
+Type=oneshot
+User=@USER@
+Environment=CAPTURES_DIR=@HOME@/captures
+ExecStart=/usr/local/bin/givcap-compress

@@ -1,0 +1,37 @@
+#!/bin/bash
+# Gzip capture files from UTC days before today. Run daily by givcap-compress.timer.
+# CAPTURES_DIR and TODAY can be overridden (used by the tests).
+set -euo pipefail
+
+CAPTURES_DIR="${CAPTURES_DIR:-$HOME/captures}"
+TODAY="${TODAY:-$(date -u +%Y-%m-%d)}"
+
+shopt -s nullglob
+compressed=()
+failed=0
+for dir in "$CAPTURES_DIR"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/; do
+    day="$(basename "$dir")"
+    [[ "$day" < "$TODAY" ]] || continue
+    for file in "$dir"*; do
+        [[ -f "$file" && "$file" != *.gz ]] || continue
+        # -f replaces a partial .gz left by a power cut during an earlier run.
+        # -k keeps the source until the .gz is safely on disk (see below).
+        # A file gzip can't compress is kept, and the run carries on with the rest.
+        if gzip -kf "$file"; then
+            compressed+=("$file")
+        else
+            echo "givcap-compress: could not compress $file" >&2
+            rm -f -- "$file.gz"
+            failed=1
+        fi
+    done
+done
+
+# Only delete the sources once the compressed copies are on disk, so a power
+# cut straight after this run can't leave an empty .gz and no source.
+if (( ${#compressed[@]} )); then
+    sync
+    rm -f -- "${compressed[@]}"
+fi
+
+exit "$failed"

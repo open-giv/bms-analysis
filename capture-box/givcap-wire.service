@@ -1,0 +1,16 @@
+[Unit]
+Description=GivEnergy BMS bus logger (RS485, listen only)
+Wants=time-sync.target
+After=time-sync.target dev-rs485.device
+BindsTo=dev-rs485.device
+
+[Service]
+Type=simple
+User=@USER@
+SupplementaryGroups=dialout
+ExecStart=/usr/local/bin/serial_hexdump_logger /dev/rs485 @HOME@/captures/%%Y-%%m-%%d/wire.log
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

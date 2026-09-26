@@ -62,7 +62,23 @@ def load_tcp_records(tcp_path: Path) -> pd.DataFrame:
             for k, v in rec.get("fields", {}).items():
                 row[f"tcp_{k}"] = v
             rows.append(row)
-    return pd.DataFrame(rows)
+    return _coerce_mixed_columns(pd.DataFrame(rows))
+
+
+def _coerce_mixed_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Make columns that mix numbers and text numeric, with the text as NaN.
+
+    A numeric topic that sometimes publishes a word like "unknown" would
+    otherwise leave an object column that to_parquet cannot write.
+    """
+    for col in df.columns:
+        if col == "ts" or df[col].dtype != object:
+            continue
+        values = df[col].dropna()
+        is_num = values.map(lambda v: isinstance(v, (int, float)) and not isinstance(v, bool))
+        if is_num.any() and not is_num.all():
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
 
 
 def load_tag_records(tags_path: Path) -> pd.DataFrame:

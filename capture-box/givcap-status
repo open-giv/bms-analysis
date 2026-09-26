@@ -1,0 +1,3 @@
+#!/bin/bash
+# Installed to /usr/local/bin by setup.sh, which replaces @REPO@.
+exec "@REPO@/.venv/bin/python" "@REPO@/tools/givcap_status.py" "$@"
