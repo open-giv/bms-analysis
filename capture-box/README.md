@@ -41,6 +41,14 @@ docker exec -u givcapuser -w /home/givcapuser/bms-analysis givcap sudo capture-b
 docker exec -u givcapuser givcap givcap-status
 ```
 
+## If the box drops off the network
+
+`setup.sh` keeps the journal on disk and turns on the hardware watchdog, so a hang reboots the Pi
+and leaves logs (`journalctl -b -1` shows the boot before). On the first real box a hang left
+NetworkManager's Wi-Fi profile in `/etc/netplan/90-NM-*.yaml` as a 0-byte file, and the Pi
+booted with no network after that. If `ls -l /etc/netplan` shows empty files, plug in Ethernet,
+delete them, and recreate the Wi-Fi connection with `nmcli device wifi connect`.
+
 ## Copy captures to your computer
 
 ```

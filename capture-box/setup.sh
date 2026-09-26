@@ -45,6 +45,14 @@ for unit in givcap-wire.service givcap-mqtt.service givcap-compress.service givc
     render "$BOX/$unit" > "/etc/systemd/system/$unit"
 done
 
+# Keep the journal on disk, so a hang leaves logs behind, and let the hardware watchdog reboot the
+# Pi if the system stops responding for 15 s. Both were added after the first real box hung with
+# nothing in the (RAM-only) journal.
+install -d /var/log/journal /etc/systemd/journald.conf.d /etc/systemd/system.conf.d
+printf '[Journal]\nStorage=persistent\nSystemMaxUse=200M\n' > /etc/systemd/journald.conf.d/givcap.conf
+printf '[Manager]\nRuntimeWatchdogSec=15s\nRebootWatchdogSec=2min\n' > /etc/systemd/system.conf.d/givcap-watchdog.conf
+systemctl restart systemd-journald
+
 install -d -m 0700 /etc/givcap
 if [[ ! -f /etc/givcap/mqtt.env ]]; then
     install -m 0600 "$BOX/mqtt.env.example" /etc/givcap/mqtt.env
@@ -54,6 +62,7 @@ fi
 udevadm control --reload
 udevadm trigger --subsystem-match=tty
 systemctl daemon-reload
+systemctl daemon-reexec
 systemctl enable systemd-time-wait-sync.service
 systemctl enable givcap-wire.service givcap-mqtt.service givcap-compress.timer
 systemctl start givcap-compress.timer
