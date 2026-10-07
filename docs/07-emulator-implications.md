@@ -110,7 +110,7 @@ See [02-holding-registers.md](02-holding-registers.md) for full layout. Key valu
 | 12 | `0x0030` (48) | Hardware-rev constant |
 | 13 | `0x0BCE` (3022) | Firmware version - claim BMS 3022. A G3 LV inverter reads the charge and discharge limits from HR26/27 only when this is 3011 or higher; below that it uses HR25 for both. |
 | 14 | `0x0000` | Status flag |
-| 15 | `0x0000` | 3-flag composite. A G3 LV ignores bit 0 below 100% SoC, and at 100% bit 0 cancels its "battery full" block, so send 0 |
+| 15 | `0x0000` | 3-flag composite. A G3 LV ignores bit 0 below 100% SoC, and at 100% bit 0 cancels its "battery full" block and the G3 charges on at 24% of rated power, so send 0 |
 | 16 | `0x0000` | Mode/state |
 | 17 | value that changes once per second | A real BMS derives it from its clock, mostly stepping by +1 each second. Incrementing once per second is the closest simple match; whether any inverter checks it is not known. |
 | 18 | `0x389D` | High half of the same clock hash; it changes about twice a day (see [02](02-holding-registers.md)). A constant is fine for short runs. |
@@ -173,7 +173,7 @@ See [02-holding-registers.md](02-holding-registers.md) for full layout. Key valu
 
 ## Stopping a charge on a G3 LV
 
-A G3 LV never takes a charge voltage from the battery. It measures the pack itself and charges until the battery lowers HR26, apart from its own taper by SoC from 90%. So the emulator decides where the pack stops. These rules follow from the D316 DSP firmware (see [05-inverter-firmware.md](05-inverter-firmware.md#a316-the-dsp-runs-the-bms-bus)):
+A G3 LV never takes a charge voltage from the battery. It measures the pack itself and charges until the battery lowers HR26 or sets HR20 bit 2, apart from its own taper by SoC from 90%. It also stops by itself 30 s after HR21 reaches 100%, unless HR15 bit 0 is set, and it doesn't charge again until HR21 has been below 99% for 5 s (see [05-inverter-firmware.md](05-inverter-firmware.md#what-the-dsp-does-with-the-bms-status-registers)). So the emulator decides where the pack stops, through HR26, HR20 and the SoC it reports. These rules follow from the D316 DSP firmware (see [05-inverter-firmware.md](05-inverter-firmware.md#a316-the-dsp-runs-the-bms-bus)):
 
 1. **Cut HR26 as the pack nears full.** The inverter keeps charging at up to its full rate until HR26 drops. Taper HR26 by the highest cell voltage, as the GivEnergy BMS does, not by SoC. If the SoC the emulator reports runs behind the pack's real state, the inverter's own SoC taper starts too late, and the pack can reach its voltage knee at full current.
 2. **HR26 = 0 is not a hard stop.** The DSP never lets the HR26 path go below 1.00 A, so about 1 A still flows until its "battery full" block sets after 30 s.
