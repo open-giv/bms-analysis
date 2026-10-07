@@ -157,7 +157,7 @@ So an emulator controls what the inverter and the GivEnergy app show by setting 
 
 GivEnergy inverters stop discharging at 4% SoC. Discharge stopped at the floor three times in this capture, at 18:20 UTC on 21 August, at 07:21 UTC on 23 August and at 17:59 UTC on 24 August. The last SoC readings from IR Block 2 before the first and last stops were 9, 7, 5% and 10, 8, 5%, falling about 2% per 200 s reading. HR21 shows the moment: it first read 4% at 18:19:56, 07:21:29 and 17:58:57, and the current was below 0.5 A 5.3 s, 2.4 s and 0.5 s later. (An earlier version of this paragraph missed the stop on 23 August, at about 63 A, and gave the delays as 6 s and 1 s.) The G3 LV DSP takes its SoC from HR21 and blocks discharge after 5 s at or below the floor (see [05-inverter-firmware.md](05-inverter-firmware.md#a316-the-dsp-runs-the-bms-bus)), which fits.
 
-At the same poll that the current dropped to zero, HR19 bit 3 (0-indexed) started switching between set and clear on almost every poll. HR19 moved between 206 and 198, or between 207 and 199. The lowest cell was then between 2951 and 3039 mV. The switching continued until the battery next charged, about 8 hours later on 21 August and about 70 minutes later on 24 August. It didn't happen at the stop on 23 August, where the lowest cell read 3.167 V at rest 35 s after the stop. During normal discharge HR19 was always 207. The switching started after the stop, not before, so it doesn't look like the reason the inverter stopped. It matches Ken's note that bit 4 (1-indexed) "oscillates below 4% SOC".
+At the same poll that the current dropped to zero, HR19 bit 3 (0-indexed) started switching between set and clear on almost every poll. HR19 moved between 206 and 198, or between 207 and 199. The lowest cell was then between 2951 and 3039 mV. The switching continued until the battery next charged, about 8 hours later on 21 August and about 70 minutes later on 24 August. It didn't happen at the stop on 23 August, where the lowest cell read 3.167 V at rest 35 s after the stop. During normal discharge HR19 was always 207. The switching started after the stop, not before, so it doesn't look like the reason the inverter stopped. It matches Ken's note that bit 4 (1-indexed) "oscillates below 4% SOC". af987 spotted a voltage bound on it. Across this capture, bit 3 never clears with HR22 above 49.40 V: every one of its 66,434 clear polls had HR22 between 47.85 V and 49.40 V, all at 4% SoC with the current between -0.10 A and +0.30 A. Below 49.40 V it doesn't always clear. Under discharge load the pack went down to 47.40 V with bit 3 set, and on the floor it flickers. Neither HR22 nor the lowest cell gives a single threshold that separates set from clear, so 49.40 V (about 3.09 V per cell) is the top of the region where the flicker happens, not a simple trip point. His later captures below never went under 49.40 V at rest, and bit 3 never cleared in them.
 
 ### The 9.5 kWh battery's registers and limits
 
@@ -231,7 +231,7 @@ So HR19 bits 6 and 7 (0-indexed) are clear while the battery's output is off, an
 
 From 98% the current stayed at the DSP's floor of 24% of rated power. HR21 read 100% from 15:16:54, and the pack was still drawing 16.0 A (about 0.87 kW by HR23 and HR22, and 0.84 kW by the inverter). The highest cell was 3.385 V to 3.404 V. The highest cell in the whole capture was 3.418 V, at 90% and 64 A, and HR22 peaked at 54.73 V. HR20 stayed 0, and HR19 stayed `0xCE`, with no bit 5 and no bit 3 clear.
 
-The battery set HR15 bit 0 at HR21 = 100% (3,340 of 3,416 polls). On a G3 that cancels the DSP's "battery full" block and lets a forced charge go past its upper SoC target (see [05-inverter-firmware.md](05-inverter-firmware.md#what-the-dsp-does-with-the-bms-status-registers)). The inverter kept charging at 16 A for 14 minutes at 100%. HR15 bit 0 cleared at 15:30:35, and the current fell to zero at 15:30:54, 19 s later. af987 confirmed on #32 that he stopped the forced charge by hand at about 16:30 BST (15:30 UTC). So his stop ended the charge, and HR15 bit 0 cleared because charging had stopped: the bit follows charging, as in [02-holding-registers.md](02-holding-registers.md#register-15-bits). Left alone, a forced charge on this battery would have carried on past 100%. His app showed about 1.2 kW at the time, but the wire showed 16 A (about 0.84 kW).
+The battery kept HR15 bit 0 set at HR21 = 100% (3,340 of 3,416 polls). It had been set since 75% on the way up. On a G3 that cancels the DSP's "battery full" block and lets a forced charge go past its upper SoC target (see [05-inverter-firmware.md](05-inverter-firmware.md#what-the-dsp-does-with-the-bms-status-registers)). The inverter kept charging at 16 A for 14 minutes at 100%. HR15 bit 0 cleared at 15:30:35.392, while the pack was still charging at 16 A. The current fell from 15.99 A to 0.18 A at 15:30:54.349, 19 s later. That is 840.13 s after HR21 first read 100% (15:16:54.221), which is exactly 28 periods of the 30 s count of the DSP's "battery full" block. If that counter runs whenever HR21 is above 99, with HR15 bit 0 cancelling the block each time it sets, the block would take hold at the first 30 s mark after the bit cleared, which is when the current fell. af987 said on #32 that he stopped the forced charge by hand at about 16:30 BST (15:30 UTC). The wire can't show when his command reached the inverter, so the capture doesn't settle whether his stop or the DSP's block ended the charge: both fit within the same minute. What it does show is that HR15 bit 0 cleared 19 s before the current changed, so the bit didn't clear because charging had stopped. His October capture shows the same block ending a solar charge 30 s after 100% (see [below](#two-nights-at-the-4-floor-and-a-solar-charge-to-100-3-to-5-october)). His app showed about 1.2 kW at the time, but the wire showed 16 A (about 0.84 kW).
 
 HR21 runs ahead of the IR Block 2 SoC on the way up. HR21 read 100% while Block 2 read 97% (193.49 Ah of 200.00 Ah), and Block 2 peaked at 99%. In 510 Block 2 reads, HR21 was 0 to 3 points above the Block 2 SoC and never below it, with the gap opening while charging above about 40% and closing during discharge. The inverter's taper and its 100% follow HR21. GivTCP's battery SoC comes from Block 2 and never showed 100%.
 
@@ -249,6 +249,64 @@ The 100 A step came at the same voltage under load as in August, and the 60 A st
 The battery then sat at 4% from 08:12:08 to 08:27:13, about 15 minutes, with HR23 between -0.10 A and +0.46 A. HR21 and the Block 2 SoC both read 4%, with 8.98 Ah remaining. At rest the pack recovered from 47.94 V to 49.94 V, and the cells to 3.064 V to 3.081 V (lowest) and 3.102 V to 3.117 V (highest). HR19 only toggled bit 0 with the sign of the current. Bit 3 didn't clear, which fits the August finding that it clears only at rest with a cell at or below about 3.04 V. A forced charge at 64.4 A started at 08:27:13, and HR21 went to 5% half a second later. HR27 stayed at 60 A for 38 s, then came back by 10 A every 11.04 s, from 70 A at 08:27:51 to 120 A at 08:28:46.
 
 HR15 was 1 in 57% of polls in this capture. Apart from the 624 s after each start, it was 0 for 223 s at the start of the forced charge, for 11.6 hours from 15:30:35 to 03:06:04 (the evening discharge and the night, until the next charge started), and for about 12 and 4 minutes during the charge on 1 October. Its meaning on 4009 is still open.
+
+### Two nights at the 4% floor and a solar charge to 100% (3 to 5 October)
+
+@af987 contributed a third capture from the same G3 HY 3.6 kW and 9.5 kWh battery (BMS firmware 4009) in PR #36: [captures/G3_HY_3_6_G3_9_5/SOCdwell.joined.parquet.redacted](../captures/G3_HY_3_6_G3_9_5/). It runs from 15:50 UTC on 3 October to 08:47 UTC on 5 October 2026, with 599,611 HR polls and 14,710 IR polls joined with GivTCP, and no time shift. He set it up to show two dwells at the 4% floor and one at 100%, and the 100% came from solar, not a forced charge. All times below are UTC.
+
+The inverter sent only FC=3 and FC=4. HR11 stayed at 186, HR20 at 0, HR25 at 150.00 A and HR26 at 100.00 A throughout. HR19 only took `0xCF` and `0xCE`, plus 27 polls of `0xCD` at exactly 0 A, so bit 5 never set and bit 3 never cleared.
+
+**The taper on a solar charge.** The inverter's SoC taper (see [05-inverter-firmware.md](05-inverter-firmware.md#a316-the-dsp-runs-the-bms-bus)) applied to the solar charge too. Up to 93% the sun gave less than the taper allowed. From 94% the charge followed the taper:
+
+| HR21 | Reached at | HR23 | Inverter's battery power |
+|---|---|---|---|
+| 94% | 14:04:15 | 40.2 A | 2.17 kW |
+| 95% | 14:07:14 | 34.2 A | 1.83 kW |
+| 96% | 14:10:45 | 28.2 A | 1.50 kW |
+| 97% | 14:15:01 | 22.1 A | 1.17 kW |
+| 98% | 14:20:27 | 16.0 A | 0.84 kW |
+| 100% | 14:49:58 | 15.75 A | 0.84 kW |
+
+These are the same steps as in his forced charge. The inverter's reading is 0.97 of 3.6 kW x (1 - 0.095 x (SoC - 90)) at every step.
+
+**The stop at 100%.** HR21 first read 100% at 14:49:58.321. HR15 had been 1 since that morning, and it cleared 1.2 s later, at 14:49:59.521, while the pack was still charging at 15.76 A. The current held at 15.7 A until 14:50:25.676, and at 14:50:28.556 it was -0.54 A. After a dip to -2.71 A it was back within 0.05 A of zero by 14:50:34.8. So the charge stopped 30.2 s after HR21 reached 100%, with HR26 at 100 A, HR20 at 0 and no HR19 bit 5. That is the G3 DSP's "battery full" block, which HR21 above 99 sets after 30 s unless HR15 bit 0 is set (see [05-inverter-firmware.md](05-inverter-firmware.md#what-the-dsp-does-with-the-bms-status-registers)). So the difference from his forced charge in September, which ran on at 16 A at 100%, is HR15 bit 0, not the kind of charge.
+
+The highest cell in the whole capture was 3.446 V, at 99% and 15.8 A, with the lowest cell at 3.421 V. The spread had been 3 mV at rest at 87% and about 10 mV through the bulk charge. HR22 peaked at 55.18 V. IR Block 2 never passed 99% (198.93 Ah of 200.00 Ah), and nor did GivTCP's SoC.
+
+**The dwell at 100%.** The battery sat at 100% from 14:50:35 until the forced export started at 16:01:06, about 70 minutes:
+
+- HR21 read 100% in all 17,211 polls, and Block 2 read 99%.
+- HR23 stayed between -0.12 A and +0.12 A, and 99.9% of polls were within 0.10 A. The net charge was zero.
+- There was no top-up. HR21 never fell below 100%, and the DSP's block only clears after 5 s below 99%.
+- HR15 stayed 0, and HR19 only changed bit 0 with the sign of the near-zero current.
+- HR22 relaxed from 54.97 V to 53.57 V. The cells relaxed to 3.341 V and 3.336 V, and the spread fell to 5 mV. Nothing on the wire marked balancing, and the fall in spread fits the cells relaxing after the current stopped.
+
+So at full this battery left the stop to the inverter. My 3020 battery cuts HR26 to 3.2 A and pulses HR19 bit 5 at 100% (see [below](#a-solar-charge-to-full-and-the-trickle-release-29-september)). His sent nothing, and the G3 held the pack at zero current.
+
+When the export started at about 50 A, HR21 stayed at 100% for 6.8 minutes, then stepped to 99% at 16:07:55, 98% at 16:09:55 and 97% 13 s later, to meet Block 2.
+
+**The two dwells at the floor.** The first came after the night's house load and the second after the evening export and house load. Both ended at the forced charge at 01:30 (02:30 BST).
+
+| | 4 October | 4 to 5 October |
+|---|---|---|
+| HR27 120 to 100 A | 00:04:41, 5%, 50.17 V, -3.0 A | 20:10:33, 5%, 50.14 V, -7.3 A |
+| Lowest cell, last reading | 3.101 V | 3.102 V |
+| HR21 first reads 4% | 00:20:09.433 | 20:19:58.622 |
+| Current below 0.5 A | 4.32 s later | 4.80 s later |
+| Dwell | 1 h 10 min | 5 h 10 min |
+| HR23 during the dwell | -0.15 to +0.17 A | -0.21 to +0.14 A |
+| Cells at rest (lowest to highest) | 3.100 to 3.132 V | 3.101 to 3.135 V |
+| Block 2 remaining | 8.99 to 8.95 Ah | 8.98 to 8.63 Ah |
+| HR15 goes from 0 to 1 | 3605.5 s after the stop | 3605.3 s after the stop |
+| HR27 back to 110 A | 202 s after the charge started | 7.7 s after the charge started |
+
+- **HR27.** Under 3 to 7 A only the 100 A step happened, at about 50.15 V. The pack never fell to the 48.4 to 48.6 V of the 60 A steps under load (its lowest was 49.76 V). Both steps came with the last lowest-cell reading, about 40 s old, at 3.101 to 3.102 V. The one step at rest in August also had a lowest cell of 3.101 V.
+- **The stop.** Both stops came within the DSP's 5 s floor check, at 4.3 s and 4.8 s. Neither was a forced discharge.
+- **During the dwell.** No poll in either dwell reached 0.3 A, so the inverter made no charge or discharge pulses. HR21 and the Block 2 SoC both stayed at 4%. Block 2's remaining capacity fell by 0.01 Ah every 7 to 10 minutes, with no step or recalibration. The lowest cell recovered by about 20 mV, and on the long night it then held at about 3.10 V. HR19 bit 3 stayed set, because the lowest cell stayed above 3.08 V, and HR20 stayed 0.
+- **HR15.** Both times HR15 bit 0 went from 0 to 1 one hour and about 5 s after the current stopped, with nothing else changing on the wire. It then stayed 1 through the next charge and discharge until HR21 reached 100% (apart from 2 minutes at 89% on the way up). In the 70 minutes at rest at 100% it stayed 0.
+- **The end.** The forced charge went straight to about 64.2 A. HR27 came back from 100 A in two steps of 10 A, 11.04 s apart, as before. The delay after the charge started was 202 s on the first night and 7.7 s on the second (38 s in his September capture), and I don't know what sets it.
+
+**Pack current in IR Block 2.** This capture was decoded with the corrected `decode_fields.py`, which reads Block 2 offsets 9 to 12 as a signed 32-bit current in mA (see [03-input-registers.md](03-input-registers.md#block-2-regs-0x0015---0x0027-19-regs)). Across 736 Block 2 reads it agrees with HR23. The correlation is 0.9995, and the median difference from the nearer HR poll is 18 mA. The sign agreed in every read with more than 1 A flowing. 38 reads were below -65.536 A, down to -79.012 A, and all of them matched HR23.
 
 ## Findings from my G3 capture (September 2026)
 

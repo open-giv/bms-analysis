@@ -216,7 +216,7 @@ These readers are from the D316 DSP image. The ones marked "run" I also ran in t
 | HR19 bit 3 | Nothing. The DSP never reads it. My battery clears it at high cell voltage (see [02](02-holding-registers.md#register-19-bits)), and that has no effect on a G3. |
 | HR19 bit 4 | Copied to a status bit sent to the ARM. |
 | HR19 bit 5 | Outside a calibration, the DSP caps the power request at 120 W of discharge (run: requests of +200 W, 0 W and -50 W all become -120 W). So the inverter discharges a little. My battery pulses this bit at full charge, and in my capture each pulse started a discharge of about 2.8 A. |
-| HR15 bit 0 | At 100% SoC it cancels the "battery full" block, and in forced charge it lets charging go past the upper SoC target. The DSP clears the bit whenever the previous SoC it received was below 100% (run), so below 100% it has no effect. |
+| HR15 bit 0 | At 100% SoC it cancels the "battery full" block (which HR21 = 100% sets after 30 s, see below), and in forced charge it lets charging go past the upper SoC target. The DSP clears the bit whenever the previous SoC it received was below 100% (run), so below 100% it has no effect. |
 | HR11 | Capped at 10000. After 50 full-poll replies (about 12 s after boot or after a battery loss), it replaces the capacity the DSP uses for the HR111/HR112 current caps (capacity x percentage + 1.5 A) and for the forced charge and discharge power. Before that, or with HR109 not 1, the DSP uses the installer's HR55. There is no table of battery models and no check against one. HR11 = 0 would drop the caps to 1.5 A and 2 A. It matters mainly with reduced HR111/HR112 or in forced charge and discharge. The ARM keeps its own copy and nothing else: the inverter's HR55 reads back as HR11 whenever HR11 is non-zero, and HR11 is never written to the inverter's EEPROM. |
 | HR1 to HR4, HR10, HR12, HR16 to HR18 | Not stored. The reply parser skips them. |
 | HR20 low byte | Sent to the ARM with every frame. |
@@ -224,6 +224,15 @@ These readers are from the D316 DSP image. The ones marked "run" I also ran in t
 | HR20 bit 3 | The discharge power limit drops to 10% of rated power (360 W on a 3.6 kW inverter), in and out of a calibration (run). This is close to the 340 W that Ken saw when setting HR20 to 0x08 with `modbus_proxy` (see [02](02-holding-registers.md#inline-protocol-modification)). |
 
 **HR26 = 0 is not a hard stop.** The HR26 path never goes below 1.00 A, so HR26 = 0 on its own leaves a charge bound of about 1 A (about 53 W at 53 V) until the "battery full" block sets after 30 s. HR20 bit 2 gives a zero charge limit at once. HR27 = 0 likewise leaves about 2 A of discharge. HR20 bit 3 alone leaves 360 W. The hard stop at empty is the SoC floor block.
+
+**The "battery full" block also sets at 100% SoC.** In the D316 image the block's counter (in `FUN_003ECFB1`) counts each 20 ms check while any of these hold, with no BMS comms fault:
+
+- the charge current limit taken from HR26 is 0
+- HR21 is above 99
+- HR20 bit 2 is set
+- an internal flag (`0xD502` bit 0) that I haven't traced
+
+At 1500 checks (30 s) it sets the block, which caps the power request at zero, and the counter starts again. The block clears only after 250 checks (5 s) with HR21 below 99, so it holds at 99%. HR15 bit 0 clears the block on every pass outside a calibration, which is how bit 0 at 100% lets charging go on. So with HR15 bit 0 clear, a G3 LV stops charging 30 s after HR21 reaches 100%, with HR26 and HR20 untouched. af987's captures show this. His solar charge in October stopped 30.2 s after HR21 read 100%, and his forced charge in September stopped 840.13 s (28 x 30 s) after HR21 read 100%, 19 s after the battery cleared HR15 bit 0 (see [06-wire-captures.md](06-wire-captures.md#two-nights-at-the-4-floor-and-a-solar-charge-to-100-3-to-5-october)). An earlier version of this page named only HR20 bit 2 as a cause of the block.
 
 **HR20 bit 2 during a calibration.** While a battery calibration runs (HR29 non-zero), the DSP raises HR26 and HR27 to at least 8.00 A and never sets the "battery full" block. HR20 bit 2 then cuts the charge power limit to 5% of rated power instead of zero: 180 W on a 3.6 kW inverter, about 3.4 A at 53 V. That overrides the 8 A minimum, but it doesn't stop charging. On the ARM side, HR20 bit 3 and bit 2 (or a DSP over-voltage trip) are the "empty" and "full" end points of the calibration. I read the ARM part from the disassembly and didn't run it.
 
