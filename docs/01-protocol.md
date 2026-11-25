@@ -94,9 +94,14 @@ FC=3 (HR) responses **do** use the standard format with byte_count - only FC=4 d
 
 ## Response format - FC=6
 
-FC=6 responses echo the request frame back unchanged (standard Modbus behaviour for write-single).
+FC=6 responses are not the standard Modbus echo. The BMS firmware shows what the battery sends:
 
-No FC=6 request appears in Ken's capture, the joined data of the 90-hour G3 capture or my own G3 captures (26 to 29 September 2026). The G3 LV DSP can send FC=6 writes to BMS registers 1 to 4 on internal counters, and it ignores the reply: it accepts only FC=3 and FC=4 replies, so an echo is neither needed nor harmful on a G3. An emulator should still answer FC=6 with the echo, since the BMS does. An earlier version of this page said the inverter retries indefinitely without the echo; I have found no capture or firmware evidence for that, and on a G3 it is not the case.
+- **Firmware 3020 and 3022** (the Gen 1 and Gen 2 LV batteries): 5 bytes. The replying pack's own address, `06`, a status byte and the CRC. The status byte is always 0, for registers the battery ignores and for out-of-range values too. The master pack sends `01 06 00 23 A0`, whichever device the write was addressed to.
+- **Firmware 4009 to 4011** (the Gen 3 LV battery): 8 bytes. The address, `06`, the register, two bytes that are 0 except in one case of `00 01`, and the CRC. That is neither an echo nor the 5-byte frame.
+
+An earlier version of this page said the battery echoes the request. That was an assumption.
+
+No FC=6 request appears in Ken's capture, the joined data of the 90-hour G3 capture or my own G3 captures (43 days of wire capture between 26 September and 24 November 2026, which hold no request other than the polls and no exception reply). The G3 LV DSP can send FC=6 writes to BMS registers 1 to 4 on internal counters, and it ignores the reply: it accepts only FC=3 and FC=4 replies, so the form of the reply makes no difference on a G3. An emulator should answer FC=6 as the battery it presents itself as does. An earlier version of this page said the inverter retries indefinitely without an echo; I have found no capture or firmware evidence for that, and on a G3 it is not the case.
 
 ## Direction handling
 

@@ -81,7 +81,7 @@ The values seen by Ken on the wire (e.g. the constant `0x2328` = 9000 = 90.00 A 
 
 Polling cadence in this firmware is event-driven (RX completion gates the next request). The observed ~245 ms HR cadence comes from a 200-tick throttle on a 1 ms SysTick plus the wire round-trip time at 9600 baud.
 
-FA-series has FC=06 builders for mode-change events (charge enable, BMS reset, force-charge). These are not sent during steady-state polling but the emulator must echo them back correctly when triggered.
+FA-series has FC=06 builders for mode-change events (charge enable, BMS reset, force-charge). These are not sent during steady-state polling and an emulator should answer them as the real battery does, which is not an echo (see [01](01-protocol.md#response-format---fc6)).
 
 #### FA inverter dispatch table for HR0..HR27 (Modbus-TCP reads)
 
@@ -200,7 +200,7 @@ Because the maximum comes from HR98, anything that lowers HR98 lowers the trip. 
 
 I ran the DSP's own receive and parse code in Ghidra's emulator on real replies from my battery and on built ones:
 
-- Byte 0 (the device) must be 0 to 15, and byte 1 (the FC) must be 3 or 4. Anything else is dropped. An FC=6 echo is ignored, so the DSP neither needs nor minds it.
+- Byte 0 (the device) must be 0 to 15, and byte 1 (the FC) must be 3 or 4. Anything else is dropped. A reply to an FC=6 write is ignored whatever its form, so the DSP neither needs nor minds it.
 - The expected length comes from the request, not from the reply's byte count field: `count * 2 + 5` bytes for FC=3, and `(count + 3) * 2` for FC=4 (the non-standard FC=4 framing). When that many bytes have arrived, the DSP checks the CRC. The FC=3 byte count field is never checked.
 - A short reply never reaches the expected length and is dropped at the next poll. A long one fails the CRC. A valid reply followed by a stray byte is accepted.
 - The DSP doesn't parse FC=4 replies. It copies them to the ARM, which parses them.

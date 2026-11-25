@@ -27,7 +27,7 @@ The emulator must respond to:
 
 - **FC=3** (read holding registers) - standard Modbus framing for both request and response
 - **FC=4** (read input registers) - standard request, **non-standard response framing** (see below)
-- **FC=6** (write single holding register) - echo back the request unchanged
+- **FC=6** (write single holding register) - not an echo. Firmware 3020 and 3022 answer with 5 bytes (`01 06 00` and the CRC from the master pack). See [01](01-protocol.md#response-format---fc6)
 
 Other FCs should return Modbus exception 0x80|FC with code 1 ("Illegal Function") - or just not respond at all. The inverter never sends them in steady-state, so this branch isn't exercised often.
 
@@ -88,7 +88,7 @@ Driven by the inverter:
 | IR Block 1 (per device) | twice, 10 s apart, in every ~200 s sweep on a G3 (one IR poll every ~10 s, one device at a time; see [03](03-input-registers.md)) | 48 bytes |
 | IR Block 2 (per device) | about every 200 s on a G3 | 44 bytes |
 | IR Block 3 (per device) | about every 200 s on a G3 | 46 bytes |
-| FC=06 mode-change writes | event-driven (charge enable, BMS reset, force-charge); not steady-state | 8 bytes echo |
+| FC=06 mode-change writes | event-driven (charge enable, BMS reset, force-charge); not steady-state | 5 bytes on firmware 3020 and 3022, 8 bytes on 4009 to 4011; not an echo |
 
 The inverter waits for response completion before issuing the next query, so there's no bus contention for the emulator to handle.
 
@@ -204,7 +204,7 @@ When the dongle / real inverter is available, end-to-end testing is straightforw
 
 3. **Returning out-of-range cell voltages** - even briefly. The strict variants silently filter and use the previous value, so a single bad poll doesn't get logged - but it also doesn't update. The inverter UI will show stale data, which is confusing to debug.
 
-4. **Forgetting to echo FC=06 writes** - echo them unchanged, as the real battery does. A G3's DSP sends its FC=06 writes on counters and doesn't act on the reply ([05](05-inverter-firmware.md)), and none appeared in over two million frames of my G3 captures, so a missing echo is unlikely to matter on a G3. Other variants are unconfirmed.
+4. **Echoing FC=06 writes** - the real battery doesn't. Firmware 3020 and 3022 answer a write with 5 bytes: the replying pack's own address, `06`, a status byte that is always 0, and the CRC (`01 06 00 23 A0` from the master pack). Firmware 4009 to 4011 answer with 8 bytes that are not an echo either. An earlier version of this page said to echo the request; that was an assumption, because no write appears in any capture. A G3's DSP throws the reply away ([05](05-inverter-firmware.md)) and I found no write in 43 days of my G3's wire captures (26 September to 24 November 2026), so on a G3 the form of the reply doesn't matter. Other variants are unconfirmed.
 
 5. **Treating the SoC as display only** - the inverter stops discharging when the SoC in HR21 reaches its 4% floor. The G3 LV DSP stores HR21's low byte as its SoC (`0xD506`) and runs its floor check on that, not on the IR Block 2 SoC. If an emulator passes through a third-party battery's SoC, that value decides how deeply the battery is discharged. Scale it if 4% on the inverter should leave a margin above the battery's own cut-off, and keep HR21 and the Block 2 SoC the same. HR21 is polled every ~245 ms, so the stop is quick: in a forced discharge at about 71 A, mine stopped within about a second of HR21 reading 4%, and in the 90-hour G3 capture the current reached zero 0.5 to 5.3 s after HR21 first read 4%. My 3020 battery doesn't soften the stop. Its HR27 (discharge limit) and HR20 (alarms) stayed unchanged all the way down to 4%. The 9.5 kWh battery (BMS firmware 4009) cuts HR27 to 100 A and then 60 A near the bottom, and the 60 A cut brought the current down from about 67 to 69 A to about 63 A in af987's captures, but it still lets about 63 A flow until HR21 reaches the floor. So the hard stop always comes from the inverter, from whatever SoC field it reads. See [06-wire-captures.md](06-wire-captures.md#discharge-stops-at-the-4-soc-floor) and [06-wire-captures.md](06-wire-captures.md#discharge-to-the-reserve-and-a-full-charge-27-29-september).
 
